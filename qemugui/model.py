@@ -291,6 +291,23 @@ class Machine:
                 return i
         return None
 
+    def first_unfilled_ata(self) -> int | None:
+        """First ATA slot that carries no image: empty, or a profile-seeded
+        placeholder (kind set, file empty). Index 0 is seeded by every OS
+        profile, so first_empty_ata() would skip it."""
+        for i, d in enumerate(self.ata):
+            if d is None or not d.file:
+                return i
+        return None
+
+    def ata_slot_status(self, i: int) -> str:
+        d = self.ata[i]
+        if d is None:
+            return "empty"
+        if not d.file:
+            return f"{d.kind}, no image yet"
+        return f"replace {Path(d.file).name}"
+
     def effective_qemu_dir(self, settings_qemu_dir: str) -> str:
         return self.qemu_dir or settings_qemu_dir
 

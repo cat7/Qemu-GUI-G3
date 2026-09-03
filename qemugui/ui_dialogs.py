@@ -145,13 +145,14 @@ class CreateDiskDialog(simpledialog.Dialog):
         r += 1
         ttk.Label(master, text="Then attach as:").grid(row=r, column=0, sticky="w", padx=4, pady=3)
         choices = ["(do not attach)"]
-        free = self.machine.first_empty_ata()
-        if free is not None:
-            choices.append(f"ATA {model.ATA_SLOT_NAMES[free]}")
+        for i, name in enumerate(model.ATA_SLOT_NAMES):
+            choices.append(f"ATA {name}  ({self.machine.ata_slot_status(i)})")
         for sid in model.SCSI_IDS:
             if self.machine.scsi_by_id(sid) is None:
                 choices.append(f"SCSI id {sid}")
-        self.place_var = tk.StringVar(value=choices[1] if len(choices) > 1 else choices[0])
+        free = self.machine.first_unfilled_ata()
+        default = choices[1 + free] if free is not None else choices[0]
+        self.place_var = tk.StringVar(value=default)
         ttk.Combobox(master, textvariable=self.place_var, values=choices, state="readonly",
                      width=26).grid(row=r, column=1, sticky="w", padx=4)
         r += 1
@@ -200,7 +201,8 @@ class CreateDiskDialog(simpledialog.Dialog):
         place = None
         p = self.place_var.get()
         if p.startswith("ATA "):
-            place = ("ata", model.ATA_SLOT_NAMES.index(p[4:]))
+            slot = p[4:].split("  (")[0]
+            place = ("ata", model.ATA_SLOT_NAMES.index(slot))
         elif p.startswith("SCSI id "):
             place = ("scsi", int(p[8:]))
         self.result = (str(self.target), fmt, place)

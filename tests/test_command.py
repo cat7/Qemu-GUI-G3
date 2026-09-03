@@ -473,3 +473,21 @@ class LibraryOps(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AtaSlotZero(unittest.TestCase):
+    """User report 2026-09-03: 'impossible to add a drive at ATA bus 0 master'.
+    Profiles seed index 0 as a placeholder (kind set, no file); the create-disk
+    dialog offered only the first *empty* slot, so index 0 was never offered."""
+
+    def test_first_unfilled_ata_offers_seeded_index_0(self):
+        m = model.new_machine("t", "macos8_9", None)
+        self.assertEqual(m.ata[0].kind, "disk")
+        self.assertEqual(m.ata[0].file, "")
+        self.assertEqual(m.first_empty_ata(), 1)          # the old behaviour, kept for reference
+        self.assertEqual(m.first_unfilled_ata(), 0)       # what the dialog must default to
+        self.assertEqual(m.ata_slot_status(0), "disk, no image yet")
+        self.assertEqual(m.ata_slot_status(1), "empty")
+        m.ata[0] = model.AtaDrive("disk", "/x/9.2.img", "raw")
+        self.assertEqual(m.first_unfilled_ata(), 1)
+        self.assertTrue(m.ata_slot_status(0).startswith("replace 9.2.img"))

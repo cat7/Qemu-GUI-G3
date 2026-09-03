@@ -49,6 +49,9 @@ class FileRow:
         self.button.grid(row=row, column=col + columnspan, padx=2, pady=1)
 
 
+CDROM_EXTS = {".iso", ".toast", ".cdr", ".dmg"}
+
+
 class DriveRow:
     """One ATA or SCSI row: kind, file, browse, format (+ identity for SCSI)."""
 
@@ -80,6 +83,16 @@ class DriveRow:
     def _browse(self):
         kind = "iso" if KIND_BY_LABEL[self.kind.get()] == "cdrom" else "hd"
         browse_file(self.entry.winfo_toplevel(), self.file, kind, IMAGE_TYPES)
+        self._infer_kind()
+
+    def _infer_kind(self):
+        """A file with Type still "(empty)" would be silently dropped on save:
+        infer the type from the extension instead."""
+        if KIND_BY_LABEL[self.kind.get()] or not self.file.get().strip():
+            return
+        ext = Path(self.file.get().strip()).suffix.lower()
+        self.kind.set(KIND_LABELS["cdrom" if ext in CDROM_EXTS else "disk"])
+        self._kind_changed()
 
     def _kind_changed(self, _e=None):
         k = KIND_BY_LABEL[self.kind.get()]
@@ -95,6 +108,7 @@ class DriveRow:
         self.format.set((d.format if d else "raw") or "raw")
 
     def get_ata(self) -> AtaDrive | None:
+        self._infer_kind()
         k = KIND_BY_LABEL[self.kind.get()]
         if not k:
             return None
@@ -112,6 +126,7 @@ class DriveRow:
         self.ver.set(base.ver)
 
     def get_scsi(self, sid: int) -> ScsiDrive | None:
+        self._infer_kind()
         k = KIND_BY_LABEL[self.kind.get()]
         if not k:
             return None

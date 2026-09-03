@@ -454,3 +454,17 @@ sudo chown "${SUDO_USER:-$(id -un)}" nvram.img pram.img 2>/dev/null
 2. On Windows, should Start for a `tap` machine also go through a visible
    console (so adapter-open errors are seen), or keep `Popen` + `last-run.log`
    (current)?
+
+## Fix 1 (2026-09-03, main session): ATA bus 0 master could not be given a drive
+
+User report: "it seems impossible to add a drive at ATA bus 0 master."
+Cause: every OS profile seeds index 0 as a placeholder row (`kind=disk`,
+no file). `CreateDiskDialog` offered only `first_empty_ata()` (slot is
+`None`), which skipped the placeholder and offered index 1 instead; there
+was no way to pick index 0 from that dialog. Fix: the dialog lists all four
+ATA slots with their status (`empty` / `disk, no image yet` / `replace
+<file>`), defaulting to the new `Machine.first_unfilled_ata()`. Also, a
+file browsed or typed into a row whose Type is still "(empty)" no longer
+gets dropped on save: the type is inferred from the extension (`.iso`,
+`.toast`, `.cdr`, `.dmg` = CD-ROM, else hard disk). Regression test
+`AtaSlotZero`; 42 tests pass.
