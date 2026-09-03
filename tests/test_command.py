@@ -257,6 +257,102 @@ class Options(unittest.TestCase):
         self.assertEqual(argv[0], "/Applications/qemu-system-ppc-g3-mac-os/qemu-system-ppc")
 
 
+class Networking(unittest.TestCase):
+    """Addendum 1: all modes go through -nic with model=bmac."""
+
+    def nic(self, mode, ifname="", platform="darwin"):
+        m = load_fixture("mac-os.json")
+        m.network = Network(mode, "00:05:02:12:34:56", ifname)
+        argv = command.build_argv(m, "", "/m", platform)
+        return argv[argv.index("-nic") + 1]
+
+    def test_none(self):
+        self.assertEqual(self.nic("none"), "none")
+
+    def test_user(self):
+        self.assertEqual(self.nic("user"), "user,model=bmac,mac=00:05:02:12:34:56")
+
+    def test_vmnet_bridged(self):
+        self.assertEqual(self.nic("vmnet-bridged", "en0"),
+                         "vmnet-bridged,ifname=en0,model=bmac,mac=00:05:02:12:34:56")
+
+    def test_vmnet_shared(self):
+        self.assertEqual(self.nic("vmnet-shared"), "vmnet-shared,model=bmac,mac=00:05:02:12:34:56")
+
+    def test_vmnet_host(self):
+        self.assertEqual(self.nic("vmnet-host"), "vmnet-host,model=bmac,mac=00:05:02:12:34:56")
+
+    def test_tap(self):
+        self.assertEqual(self.nic("tap", "TAP-Windows Adapter V9", "win32"),
+                         "tap,ifname=TAP-Windows Adapter V9,model=bmac,mac=00:05:02:12:34:56")
+
+    def test_vmnet_command_has_sudo_prefix_and_chown_tail(self):
+        m = load_fixture("mac-os-vmnet-bridged.json")
+        text = command.launcher_text(m, "", "/m", "darwin")
+        lines = text.splitlines()
+        self.assertIn("sudo /Applications/qemu-system-ppc-g3-mac-os/qemu-system-ppc \\", lines)
+        self.assertIn("-nic vmnet-bridged,ifname=en0,model=bmac,mac=00:05:02:12:34:56 \\", lines)
+        self.assertTrue(lines[-1].startswith("sudo chown "), lines[-1])
+        self.assertIn("nvram.img pram.img", lines[-1])
+        self.assertIn("SUDO_USER", lines[-1])
+        # the argv used by Popen never contains sudo
+        argv = command.build_argv(m, "", "/m", "darwin")
+        self.assertNotIn("sudo", argv[0])
+        self.assertTrue(command.needs_sudo(m, "darwin"))
+        self.assertFalse(command.needs_sudo(m, "win32"))
+
+    def test_user_mode_command_has_no_sudo(self):
+        m = load_fixture("mac-os.json")
+        text = command.launcher_text(m, "", "/m", "darwin")
+        self.assertNotIn("sudo", text)
+        self.assertNotIn("chown", text)
+
+    def test_bat_never_has_sudo_or_chown(self):
+        for f in ("tap-windows.json", "mac-os-vmnet-bridged.json"):
+            m = load_fixture(f)
+            text = command.launcher_text(m, "", r"C:\m", "win32")
+            self.assertNotIn("sudo", text, f)
+            self.assertNotIn("chown", text, f)
+        m = load_fixture("tap-windows.json")
+        text = command.launcher_text(m, "", r"C:\m", "win32")
+        self.assertIn('-nic "tap,ifname=TAP-Windows Adapter V9,model=bmac,mac=00:05:02:12:34:56"', text)
+
+    def test_cross_platform_load_save_round_trip(self):
+        # a Windows tap record loaded on macOS saves unchanged and still renders tap
+        m = load_fixture("tap-windows.json")
+        self.assertEqual(m.network, Network("tap", "00:05:02:12:34:56", "TAP-Windows Adapter V9"))
+        again = Machine.from_json(m.to_json())
+        self.assertEqual(again, m)
+        self.assertEqual(json.loads(m.to_json())["network"],
+                         {"mode": "tap", "mac": "00:05:02:12:34:56", "ifname": "TAP-Windows Adapter V9"})
+        self.assertIn("tap,ifname=TAP-Windows Adapter V9,model=bmac,mac=00:05:02:12:34:56",
+                      command.build_argv(m, "", "/m", "darwin"))
+        errors, warnings = model.validate(m, None, "darwin", check_files=False)
+        self.assertEqual(errors, [])
+        self.assertTrue(any("is for Windows" in w for w in warnings))
+        # and a macOS vmnet record on Windows
+        v = load_fixture("mac-os-vmnet-bridged.json")
+        self.assertEqual(Machine.from_json(v.to_json()), v)
+        errors, warnings = model.validate(v, None, "win32", check_files=False)
+        self.assertEqual(errors, [])
+        self.assertTrue(any("is for macOS" in w for w in warnings))
+        # user/none records carry no ifname key
+        self.assertNotIn("ifname", json.loads(load_fixture("mac-os.json").to_json())["network"])
+
+    def test_modes_offered_per_host(self):
+        self.assertEqual(model.network_modes_for_host("darwin"),
+                         ["none", "user", "vmnet-bridged", "vmnet-shared", "vmnet-host"])
+        self.assertEqual(model.network_modes_for_host("win32"), ["none", "user", "tap"])
+        self.assertEqual(model.network_modes_for_host("win32", "vmnet-shared"),
+                         ["none", "user", "tap", "vmnet-shared"])
+
+    def test_ifname_required(self):
+        m = load_fixture("mac-os.json")
+        m.network = Network("vmnet-bridged", "00:05:02:12:34:56", "")
+        errors, _ = model.validate(m, None, "darwin", check_files=False)
+        self.assertTrue(any("interface name" in e for e in errors))
+
+
 class JsonRoundTrip(unittest.TestCase):
 
     def test_fixtures_round_trip(self):
@@ -301,6 +397,15 @@ class Validation(unittest.TestCase):
         m.scsi.append(ScsiDrive(3, "disk", "/y.img"))
         errors, _ = model.validate(m, None, "darwin", check_files=False)
         self.assertTrue(any("SCSI drives use id 3" in e for e in errors))
+
+    def test_scsi_id_7_is_the_computer(self):
+        m = load_fixture("mac-os.json")
+        m.scsi.append(ScsiDrive(7, "disk", "/y.img"))
+        errors, _ = model.validate(m, None, "darwin", check_files=False)
+        self.assertTrue(any("SCSI id 7 is the computer" in e for e in errors))
+        loaded = Machine.from_dict({"name": "x", "scsi": [{"id": 7, "kind": "disk", "file": "/y.img"}]})
+        errors, _ = model.validate(loaded, None, "darwin", check_files=False)
+        self.assertTrue(any("SCSI id 7 is the computer" in e for e in errors))
 
     def test_bad_name_and_ram(self):
         m = load_fixture("mac-os.json")

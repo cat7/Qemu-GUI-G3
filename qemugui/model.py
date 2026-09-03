@@ -29,7 +29,12 @@ DRIVE_KINDS = ("disk", "cdrom")
 FORMATS = ("raw", "qcow2")
 DISPLAYS = {"darwin": ("sdl", "cocoa"), "win32": ("sdl", "gtk"), "linux": ("sdl", "gtk")}
 AUDIO_MODES = ("default", "sdl", "none")
-NETWORK_MODES = ("user", "none")
+NETWORK_MODES = ("none", "user", "vmnet-bridged", "vmnet-shared", "vmnet-host", "tap")
+# platform each mode is meant for (None = all); "darwin" | "win32"
+NETWORK_MODE_PLATFORM = {"none": None, "user": None, "vmnet-bridged": "darwin",
+                         "vmnet-shared": "darwin", "vmnet-host": "darwin", "tap": "win32"}
+NETWORK_MODES_WITH_IFNAME = ("vmnet-bridged", "tap")
+SCSI_SELF_ID = 7                   # the Macintosh itself (MESH controller)
 GOVERNOR_MODES = ("default", "off", "mips")
 RAM_CHOICES = (128, 256, 512, 768, 1024)
 RAM_MIN, RAM_MAX = 32, 4096
@@ -125,17 +130,46 @@ class SecondGpu:
 
 @dataclass
 class Network:
-    mode: str = "user"           # user | none
+    mode: str = "user"           # none | user | vmnet-bridged | vmnet-shared | vmnet-host | tap
     mac: str = DEFAULT_MAC
+    ifname: str = ""             # host interface for vmnet-bridged (en0) / tap (TAP-Windows adapter name)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = {"mode": self.mode, "mac": self.mac}
+        if self.mode in NETWORK_MODES_WITH_IFNAME or self.ifname:
+            d["ifname"] = self.ifname
+        return d
 
     @classmethod
     def from_dict(cls, d: Any) -> "Network":
         if not isinstance(d, dict):
             return cls()
-        return cls(str(d.get("mode", "user")), str(d.get("mac", DEFAULT_MAC)))
+        return cls(str(d.get("mode", "user")), str(d.get("mac", DEFAULT_MAC)),
+                   str(d.get("ifname", "") or ""))
+
+    @property
+    def needs_sudo(self) -> bool:
+        """vmnet backends need root (or the com.apple.vm.networking entitlement)."""
+        return self.mode.startswith("vmnet-")
+
+    @property
+    def platform(self) -> str | None:
+        return NETWORK_MODE_PLATFORM.get(self.mode)
+
+
+def network_modes_for_host(platform: str = paths.HOST_PLATFORM, current: str | None = None) -> list[str]:
+    """Modes the editor offers on *platform*, plus whatever the record holds."""
+    host = "win32" if paths.is_windows(platform) else platform
+    out = [m for m in NETWORK_MODES if NETWORK_MODE_PLATFORM[m] in (None, host)]
+    if current and current not in out:
+        out.append(current)
+    return out
+
+
+def default_ifname(mode: str, platform: str = paths.HOST_PLATFORM) -> str:
+    if mode == "vmnet-bridged" and platform == "darwin":
+        return "en0"
+    return ""
 
 
 @dataclass
@@ -297,8 +331,19 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
         warnings.append("RAM above 1024 MB is untested (real hardware maxes at 768 MB).")
     if m.display == "cocoa" and platform != "darwin":
         warnings.append("Display 'cocoa' only exists on macOS; use sdl or gtk here.")
-    if m.network.mode == "user" and not MAC_RE.match(m.network.mac):
-        errors.append("MAC address must look like 00:05:02:12:34:56.")
+    net = m.network
+    if net.mode not in NETWORK_MODES:
+        errors.append(f"Unknown network mode '{net.mode}'.")
+    else:
+        if net.mode != "none" and not MAC_RE.match(net.mac):
+            errors.append("MAC address must look like 00:05:02:12:34:56.")
+        if net.mode in NETWORK_MODES_WITH_IFNAME and not net.ifname.strip():
+            errors.append(f"Network mode {net.mode} needs an interface name "
+                          f"({'en0 etc.' if net.mode == 'vmnet-bridged' else 'the TAP-Windows adapter name'}).")
+        host = "win32" if paths.is_windows(platform) else platform
+        if net.platform is not None and net.platform != host:
+            warnings.append(f"Network mode {net.mode} is for "
+                            f"{'macOS' if net.platform == 'darwin' else 'Windows'}; it will not work here.")
     if m.governor.mode == "mips" and not (1 <= m.governor.mips <= 100000):
         errors.append("Custom MIPS must be between 1 and 100000.")
     if m.second_gpu:
@@ -316,8 +361,10 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
         if s.id in seen_ids:
             errors.append(f"Two SCSI drives use id {s.id}.")
         seen_ids.add(s.id)
-        if s.id not in SCSI_IDS:
-            errors.append(f"SCSI id {s.id} is out of range (0..6; 7 is the controller).")
+        if s.id == SCSI_SELF_ID:
+            errors.append("SCSI id 7 is the computer (the MESH controller itself).")
+        elif s.id not in SCSI_IDS:
+            errors.append(f"SCSI id {s.id} is out of range (0..6; 7 is the computer).")
         if s.kind not in DRIVE_KINDS:
             errors.append(f"SCSI id {s.id}: unknown kind '{s.kind}'.")
         if not s.file:

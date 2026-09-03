@@ -54,6 +54,26 @@ def governor_option(m: Machine) -> str:
     return m.machine
 
 
+def nic_option(net) -> str:
+    """The -nic value. Every mode goes through -nic with model=bmac: macio.c
+    only instantiates the onboard bmac when such a nic exists."""
+    if net.mode == "none":
+        return "none"
+    tail = f"model=bmac,mac={net.mac}"
+    if net.mode == "user":
+        return f"user,{tail}"
+    if net.mode in ("vmnet-bridged", "tap"):
+        return f"{net.mode},ifname={qopt(net.ifname)},{tail}"
+    if net.mode in ("vmnet-shared", "vmnet-host"):
+        return f"{net.mode},{tail}"
+    raise ValueError(f"unknown network mode {net.mode!r}")
+
+
+def needs_sudo(m: Machine, platform: str = paths.HOST_PLATFORM) -> bool:
+    """vmnet-* launchers run the binary under sudo (macOS only; never in a .bat)."""
+    return m.network.needs_sudo and not paths.is_windows(platform)
+
+
 def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
                platform: str = paths.HOST_PLATFORM) -> list[str]:
     """The complete argv, first token = absolute path of the QEMU binary."""
@@ -81,10 +101,7 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
             parts.append(f"romfile={qopt(_path(m.second_gpu.romfile, qd, platform))}")
         argv += ["-device", ",".join(parts)]
 
-    if m.network.mode == "none":
-        argv += ["-nic", "none"]
-    else:
-        argv += ["-nic", f"user,model=bmac,mac={m.network.mac}"]
+    argv += ["-nic", nic_option(m.network)]
 
     for index, d in enumerate(m.ata):
         if d is None or not d.file:
@@ -129,16 +146,26 @@ def group_options(argv: list[str]) -> list[list[str]]:
     return groups
 
 
-def render_shell(argv: list[str]) -> str:
+SUDO_NOTE = ("# vmnet networking needs root: the binary runs under sudo (Terminal asks for "
+             "the password). Files QEMU creates under sudo are root-owned, so they are "
+             "given back to the user afterwards.")
+CHOWN_LINE = 'sudo chown "${SUDO_USER:-$(id -un)}" nvram.img pram.img 2>/dev/null'
+
+
+def render_shell(argv: list[str], sudo: bool = False) -> str:
     lines = ["#!/bin/bash",
              f"# {HEADER_NOTE}",
              'cd "$(dirname "$0")"',
-             "",
-             shlex.quote(argv[0]) + " \\"]
+             ""]
+    if sudo:
+        lines.append(SUDO_NOTE)
+    lines.append(("sudo " if sudo else "") + shlex.quote(argv[0]) + " \\")
     groups = group_options(argv)
     for i, g in enumerate(groups):
         cont = " \\" if i < len(groups) - 1 else ""
         lines.append(" ".join(shlex.quote(t) for t in g) + cont)
+    if sudo:
+        lines += ["", CHOWN_LINE]
     return "\n".join(lines) + "\n"
 
 
@@ -164,13 +191,15 @@ def render_bat(argv: list[str]) -> str:
     return "\r\n".join(lines) + "\r\n"
 
 
-def render_launcher(argv: list[str], platform: str = paths.HOST_PLATFORM) -> str:
-    return render_bat(argv) if paths.is_windows(platform) else render_shell(argv)
+def render_launcher(argv: list[str], platform: str = paths.HOST_PLATFORM, sudo: bool = False) -> str:
+    """The .bat never gets sudo; *sudo* only affects the shell rendering."""
+    return render_bat(argv) if paths.is_windows(platform) else render_shell(argv, sudo)
 
 
 def launcher_text(m: Machine, qemu_dir: str, machine_dir: str,
                   platform: str = paths.HOST_PLATFORM) -> str:
-    return render_launcher(build_argv(m, qemu_dir, machine_dir, platform), platform)
+    return render_launcher(build_argv(m, qemu_dir, machine_dir, platform), platform,
+                           needs_sudo(m, platform))
 
 
 def write_launcher(m: Machine, qemu_dir: str, machine_dir: str,
@@ -180,7 +209,7 @@ def write_launcher(m: Machine, qemu_dir: str, machine_dir: str,
     import os
     import stat
     argv = build_argv(m, qemu_dir, machine_dir, platform)
-    text = render_launcher(argv, platform)
+    text = render_launcher(argv, platform, needs_sudo(m, platform))
     path = Path(machine_dir) / paths.launcher_name(platform)
     path.write_text(text, encoding="utf-8", newline="")
     if not paths.is_windows(platform):

@@ -279,6 +279,10 @@ class MachineEditor(tk.Toplevel):
         for c, h in enumerate(("ID", "Type", "Image", "", "Format", "", "Vendor", "Product", "Ver")):
             ttk.Label(f, text=h, foreground="gray").grid(row=0, column=c, sticky="w", padx=4)
         self.scsi_rows = [DriveRow(f, sid + 1, f"scsi-id {sid}", scsi=True) for sid in model.SCSI_IDS]
+        # id 7 is the computer: a fixed, non-editable row, never saved
+        ttk.Label(f, text=f"scsi-id {model.SCSI_SELF_ID}").grid(row=8, column=0, sticky="w", padx=4, pady=1)
+        self_row = ttk.Label(f, text="--  the Macintosh itself (MESH controller)", foreground="gray")
+        self_row.grid(row=8, column=1, columnspan=8, sticky="w", padx=2, pady=1)
         ttk.Label(f, text="MESH controller, built in (id 7). The ROM prefers a SCSI CD over an ATA CD; "
                           "holding C at boot picks the first CD; Startup Disk overrides. "
                           "Identity strings are optional and prefilled with the user's values.",
@@ -301,22 +305,58 @@ class MachineEditor(tk.Toplevel):
     def _build_net_audio(self):
         f = self._tab("Network & Audio")
         ttk.Label(f, text="Network (onboard bmac)", font=("", 0, "bold")).grid(row=0, column=0, columnspan=3, sticky="w")
+        ttk.Label(f, text="Mode:").grid(row=1, column=0, sticky="w")
         self.net_mode = tk.StringVar(value="user")
-        ttk.Radiobutton(f, text="User-mode NAT", variable=self.net_mode, value="user").grid(row=1, column=0, sticky="w")
-        ttk.Label(f, text="MAC:").grid(row=1, column=1, sticky="e")
+        self.net_mode_cb = ttk.Combobox(f, textvariable=self.net_mode, state="readonly", width=16,
+                                        values=model.network_modes_for_host())
+        self.net_mode_cb.grid(row=1, column=1, sticky="w")
+        self.net_mode_cb.bind("<<ComboboxSelected>>", self._net_mode_changed)
+        ttk.Label(f, text="MAC:").grid(row=2, column=0, sticky="w")
         self.mac_var = tk.StringVar()
-        ttk.Entry(f, textvariable=self.mac_var, width=20).grid(row=1, column=2, sticky="w")
-        ttk.Radiobutton(f, text="None (-nic none)", variable=self.net_mode, value="none").grid(row=2, column=0, sticky="w")
-        ttk.Separator(f).grid(row=3, column=0, columnspan=3, sticky="ew", pady=8)
-        ttk.Label(f, text="Audio (awacs)", font=("", 0, "bold")).grid(row=4, column=0, columnspan=3, sticky="w")
+        ttk.Entry(f, textvariable=self.mac_var, width=20).grid(row=2, column=1, sticky="w")
+        ttk.Label(f, text="Interface (ifname):").grid(row=3, column=0, sticky="w")
+        self.ifname_var = tk.StringVar()
+        self.ifname_entry = ttk.Entry(f, textvariable=self.ifname_var, width=28)
+        self.ifname_entry.grid(row=3, column=1, sticky="w")
+        self.net_hint = ttk.Label(f, text="", foreground="gray", wraplength=560, justify="left")
+        self.net_hint.grid(row=4, column=0, columnspan=3, sticky="w", pady=(2, 0))
+        ttk.Separator(f).grid(row=5, column=0, columnspan=3, sticky="ew", pady=8)
+        ttk.Label(f, text="Audio (awacs)", font=("", 0, "bold")).grid(row=6, column=0, columnspan=3, sticky="w")
         self.audio_var = tk.StringVar(value="default")
         default_name = {"darwin": "coreaudio", "win32": "dsound"}.get(
             "win32" if paths.is_windows() else paths.HOST_PLATFORM, "sdl")
         ttk.Radiobutton(f, text=f"Platform default ({default_name} here)", variable=self.audio_var,
-                        value="default").grid(row=5, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text="sdl", variable=self.audio_var, value="sdl").grid(row=6, column=0, sticky="w")
+                        value="default").grid(row=7, column=0, columnspan=3, sticky="w")
+        ttk.Radiobutton(f, text="sdl", variable=self.audio_var, value="sdl").grid(row=8, column=0, sticky="w")
         ttk.Radiobutton(f, text="none (boots over Remote Desktop)", variable=self.audio_var,
-                        value="none").grid(row=7, column=0, columnspan=3, sticky="w")
+                        value="none").grid(row=9, column=0, columnspan=3, sticky="w")
+
+    NET_HINTS = {
+        "none": "-nic none: the guest sees no network.",
+        "user": "-nic user,model=bmac,mac=...: user-mode NAT, no setup needed (default).",
+        "vmnet-bridged": "-nic vmnet-bridged,ifname=<if>,model=bmac,mac=...: guest joins the LAN of the "
+                         "host interface (en0 = first Ethernet/Wi-Fi). macOS only.",
+        "vmnet-shared": "-nic vmnet-shared,model=bmac,mac=...: NAT through Apple's vmnet with DHCP. macOS only.",
+        "vmnet-host": "-nic vmnet-host,model=bmac,mac=...: host-only network. macOS only.",
+        "tap": "-nic tap,ifname=<adapter>,model=bmac,mac=...: needs an installed TAP-Windows adapter "
+               "(OpenVPN); ifname = its name as shown in Network Connections. Windows only.",
+    }
+    SUDO_HINT = ("vmnet needs root: run.command runs QEMU under sudo, Start opens it in Terminal, which asks "
+                 "for the password (the GUI never sees it). Files QEMU creates under sudo (nvram.img, "
+                 "pram.img) become root-owned; the launcher chowns them back to you afterwards.")
+
+    def _net_mode_changed(self, _e=None):
+        mode = self.net_mode.get()
+        hint = self.NET_HINTS.get(mode, "")
+        if mode.startswith("vmnet-"):
+            hint += "\n" + self.SUDO_HINT
+        self.net_hint.config(text=hint)
+        if mode in model.NETWORK_MODES_WITH_IFNAME:
+            self.ifname_entry.config(state="normal")
+            if not self.ifname_var.get():
+                self.ifname_var.set(model.default_ifname(mode))
+        else:
+            self.ifname_entry.config(state="disabled")
 
     def _build_advanced(self):
         f = self._tab("Advanced")
@@ -366,8 +406,11 @@ class MachineEditor(tk.Toplevel):
             row.set_scsi(m.scsi_by_id(sid))
         self.floppy_mode.set("file" if m.floppy else "none")
         self.floppy_var.set(m.floppy.file if m.floppy else "")
+        self.net_mode_cb.config(values=model.network_modes_for_host(current=m.network.mode))
         self.net_mode.set(m.network.mode)
         self.mac_var.set(m.network.mac)
+        self.ifname_var.set(m.network.ifname)
+        self._net_mode_changed()
         self.audio_var.set(m.audio)
         self.gov_mode.set(m.governor.mode)
         self.mips_var.set(str(m.governor.mips))
@@ -399,7 +442,9 @@ class MachineEditor(tk.Toplevel):
             m.floppy = Floppy(self.floppy_var.get().strip(), "raw")
         else:
             m.floppy = None
-        m.network = Network(self.net_mode.get(), self.mac_var.get().strip())
+        mode = self.net_mode.get()
+        ifname = self.ifname_var.get().strip() if mode in model.NETWORK_MODES_WITH_IFNAME else ""
+        m.network = Network(mode, self.mac_var.get().strip(), ifname)
         try:
             mips = int(self.mips_var.get())
         except ValueError:

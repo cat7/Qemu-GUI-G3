@@ -292,3 +292,165 @@ d68427f GUI: main window, machine editor, dialogs, entry point; smoke/screenshot
 ```
 
 plus the commit adding `tools/render_fixture.py` and this report.
+
+## Addendum 1 (2026-09-03): SCSI id 7 row and networking modes
+
+Implemented per the contract's Addendum 1 (commit `6145f59`).
+
+What changed:
+
+- `qemugui/model.py`: `Network` gains `ifname`; modes `none | user |
+  vmnet-bridged | vmnet-shared | vmnet-host | tap`; `network_modes_for_host()`
+  (host-filtered list plus the record's own mode); `default_ifname()`
+  (`en0` for vmnet-bridged on macOS, empty otherwise); validation: unknown
+  mode = error, empty ifname for vmnet-bridged/tap = error, mode-vs-host
+  mismatch = warning ("Network mode tap is for Windows; it will not work
+  here"), SCSI id 7 in a record = error "SCSI id 7 is the computer (the
+  MESH controller itself)". `ifname` is written to `machine.json` for the
+  two modes that need it (and whenever non-empty); user/none records are
+  unchanged.
+- `qemugui/command.py`: `nic_option()` emits exactly the addendum's table;
+  `needs_sudo()`; `render_shell(argv, sudo)` prefixes `sudo ` to the binary
+  line and appends the chown tail for `vmnet-*`; the `.bat` never gets
+  either. `build_argv()` (what `Popen` would get) never contains sudo.
+- `qemugui/ui_machine.py`: SCSI tab has 8 rows, row `scsi-id 7 -- the
+  Macintosh itself (MESH controller)` fixed and non-editable, never saved.
+  Network tab: mode combobox (host-filtered + current), MAC, ifname (enabled
+  only for vmnet-bridged/tap, prefilled `en0`), per-mode hint text and the
+  root-owned-files note for vmnet.
+- `qemugui/ui_main.py`: `start_in_terminal()`; `start_selected()` for a
+  vmnet machine writes the launcher and runs `open -a Terminal
+  <machine>/run.command`; status line "started in Terminal (sudo required
+  for vmnet) at HH:MM:SS"; no pid tracking. On a non-macOS host it refuses.
+- Fixtures: `tests/fixtures/mac-os-vmnet-bridged.json` (the Mac OS fixture
+  with vmnet-bridged/en0) and `tests/fixtures/tap-windows.json` (Windows
+  record with `tap` + `TAP-Windows Adapter V9`).
+- Tests added (13): one token check per mode (none, user, vmnet-bridged,
+  vmnet-shared, vmnet-host, tap), sudo prefix + chown tail in the vmnet
+  `.command`, no sudo in the user-mode `.command`, no sudo/chown in the
+  `.bat` for both vmnet and tap records, the id-7 validation error (built
+  and loaded), the cross-platform load/save round trip (tap record on
+  macOS and vmnet record on Windows: identical dataclass, identical JSON
+  network block, correct warning), host mode lists, ifname-required error.
+- README: "Networking (Addendum 1)" section with the exact emitted lines,
+  the sudo/Terminal behaviour, the chown line verbatim, the TAP adapter
+  requirement, and the id-7 note.
+
+No smoke boot (per the addendum). Existing fixture renders re-run:
+`tools/render_fixture.py tests/fixtures/mac-os.json` is byte-identical to
+the pre-addendum output; `server12v3`, `linux`, `scsi-windows` unchanged.
+Headless Tk exercise: editor round-trips a vmnet record and a tap record
+unchanged, the tap record saves unchanged on macOS, Start on the vmnet
+machine issued `open -a Terminal .../run.command` and set the Terminal
+status line.
+
+### Test output (verbatim)
+
+`/Users/hsp/PycharmProjects/QemuGUI-PPC/.venv/bin/python -m unittest discover -s tests -v`
+
+```
+test_fixtures_round_trip (test_command.JsonRoundTrip.test_fixtures_round_trip) ... ok
+test_full_record_round_trip (test_command.JsonRoundTrip.test_full_record_round_trip) ... ok
+test_legacy_profile_alias (test_command.JsonRoundTrip.test_legacy_profile_alias) ... ok
+test_create_save_duplicate_delete (test_command.LibraryOps.test_create_save_duplicate_delete) ... ok
+test_write_launcher_is_executable_and_regenerated (test_command.LibraryOps.test_write_launcher_is_executable_and_regenerated) ... ok
+test_bat_never_has_sudo_or_chown (test_command.Networking.test_bat_never_has_sudo_or_chown) ... ok
+test_cross_platform_load_save_round_trip (test_command.Networking.test_cross_platform_load_save_round_trip) ... ok
+test_ifname_required (test_command.Networking.test_ifname_required) ... ok
+test_modes_offered_per_host (test_command.Networking.test_modes_offered_per_host) ... ok
+test_none (test_command.Networking.test_none) ... ok
+test_tap (test_command.Networking.test_tap) ... ok
+test_user (test_command.Networking.test_user) ... ok
+test_user_mode_command_has_no_sudo (test_command.Networking.test_user_mode_command_has_no_sudo) ... ok
+test_vmnet_bridged (test_command.Networking.test_vmnet_bridged) ... ok
+test_vmnet_command_has_sudo_prefix_and_chown_tail (test_command.Networking.test_vmnet_command_has_sudo_prefix_and_chown_tail) ... ok
+test_vmnet_host (test_command.Networking.test_vmnet_host) ... ok
+test_vmnet_shared (test_command.Networking.test_vmnet_shared) ... ok
+test_ata_index_explicit_for_every_slot (test_command.Options.test_ata_index_explicit_for_every_slot) ... ok
+test_audio_and_network_none (test_command.Options.test_audio_and_network_none) ... ok
+test_comma_in_path_is_escaped_for_qemu (test_command.Options.test_comma_in_path_is_escaped_for_qemu) ... ok
+test_extra_args_appended_verbatim (test_command.Options.test_extra_args_appended_verbatim) ... ok
+test_floppy (test_command.Options.test_floppy) ... ok
+test_global_qemu_dir_used_when_no_override (test_command.Options.test_global_qemu_dir_used_when_no_override) ... ok
+test_governor (test_command.Options.test_governor) ... ok
+test_onboard_rom_none (test_command.Options.test_onboard_rom_none) ... ok
+test_relative_image_resolves_against_machine_folder (test_command.Options.test_relative_image_resolves_against_machine_folder) ... ok
+test_second_gpu_none (test_command.Options.test_second_gpu_none) ... ok
+test_binary_is_absolute_and_first (test_command.UserLaunchers.test_binary_is_absolute_and_first) ... ok
+test_linux (test_command.UserLaunchers.test_linux) ... ok
+test_mac_os (test_command.UserLaunchers.test_mac_os) ... ok
+test_server12v3 (test_command.UserLaunchers.test_server12v3) ... ok
+test_shell_rendering_shape (test_command.UserLaunchers.test_shell_rendering_shape) ... ok
+test_bad_name_and_ram (test_command.Validation.test_bad_name_and_ram) ... ok
+test_cd_elsewhere_with_index2_empty_warns (test_command.Validation.test_cd_elsewhere_with_index2_empty_warns) ... ok
+test_duplicate_scsi_id_is_error (test_command.Validation.test_duplicate_scsi_id_is_error) ... ok
+test_missing_image_is_warning_not_error (test_command.Validation.test_missing_image_is_warning_not_error) ... ok
+test_scsi_id_7_is_the_computer (test_command.Validation.test_scsi_id_7_is_the_computer) ... ok
+test_seeded_slot_without_image_is_warning_and_skipped (test_command.Validation.test_seeded_slot_without_image_is_warning_and_skipped) ... ok
+test_bat_scsi_identity (test_command.WindowsRendering.test_bat_scsi_identity) ... ok
+test_extra_args_windows_backslashes_kept (test_command.WindowsRendering.test_extra_args_windows_backslashes_kept) ... ok
+test_posix_scsi_identity_token_is_whole (test_command.WindowsRendering.test_posix_scsi_identity_token_is_whole) ... ok
+
+----------------------------------------------------------------------
+Ran 41 tests in 0.009s
+
+OK
+```
+
+### Rendered `run.command` for the vmnet-bridged variant of the Mac OS fixture
+
+`tools/render_fixture.py tests/fixtures/mac-os-vmnet-bridged.json`
+
+```
+#!/bin/bash
+# Generated by Qemu-GUI from machine.json. Hand edits are lost: this file is rewritten every time the machine is saved or started.
+cd "$(dirname "$0")"
+
+# vmnet networking needs root: the binary runs under sudo (Terminal asks for the password). Files QEMU creates under sudo are root-owned, so they are given back to the user afterwards.
+sudo /Applications/qemu-system-ppc-g3-mac-os/qemu-system-ppc \
+-M g3beige \
+-m 512 \
+-bios /Applications/qemu-system-ppc-g3-mac-os/PowerMacG3v3.ROM \
+-display sdl \
+-audiodev coreaudio,id=snd \
+-global awacs.audiodev=snd \
+-global ati-mach64-gt.romfile=/Applications/qemu-system-ppc-g3-mac-os/ati_mach_gt.rom \
+-device ati-rage128-pro,addr=0x0e,romfile=/Applications/qemu-system-ppc-g3-mac-os/ati_nexus128_103_pci.rom \
+-nic vmnet-bridged,ifname=en0,model=bmac,mac=00:05:02:12:34:56 \
+-drive file=/Volumes/Macdata/qemu/hd/9.2-pristine-vm-off.img,format=raw,media=disk,index=0 \
+-drive file=/Volumes/Macdata/qemu/iso/8.1.iso,format=raw,if=none,id=scd3 \
+-device scsi-cd,drive=scd3,scsi-id=3
+
+sudo chown "${SUDO_USER:-$(id -un)}" nvram.img pram.img 2>/dev/null
+```
+
+### Deviations in the addendum
+
+- **A1 chown line.** The addendum says both `chown "$(id -un)"` guarded by
+  `[ -n "$SUDO_USER" ]` and `chown "$SUDO_USER"`. Because only the binary
+  is prefixed with sudo, `$SUDO_USER` is never set in the launcher script
+  itself, so that guard would make the chown a no-op; and a plain `chown`
+  by the user cannot take ownership away from root. Emitted instead:
+  `sudo chown "${SUDO_USER:-$(id -un)}" nvram.img pram.img 2>/dev/null` --
+  works whether the script is run plainly (sudo credentials are still
+  cached from the QEMU run, so no second prompt) or wholly under sudo.
+  `last-run.log` is not included: a Terminal-started run does not write it.
+- **A2 ifname required.** An empty ifname for vmnet-bridged/tap is a
+  validation *error* (QEMU rejects `ifname=`), not a warning; the editor
+  prefills `en0` on macOS. A Windows tap record with a name loads and saves
+  unchanged on macOS (tested); one with an empty name would need the name
+  filled before Save on either platform.
+- **A3 mode-vs-host** is a warning, as specified; the overview still shows
+  the launcher for the record's mode and Start on macOS refuses a vmnet
+  machine only when the host is not macOS.
+- **A4 vmnet Start** issues `open -a Terminal <run.command>` from the
+  machine folder and records the time; the machine list "State" column is
+  not set to "running" because there is no pid to poll.
+
+### Open questions (addendum)
+
+1. Should vmnet-shared / vmnet-host be seeded as the default for any
+   profile, or stay opt-in (currently opt-in; default remains `user`)?
+2. On Windows, should Start for a `tap` machine also go through a visible
+   console (so adapter-open errors are seen), or keep `Popen` + `last-run.log`
+   (current)?

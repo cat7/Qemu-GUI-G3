@@ -64,6 +64,19 @@ class RunningMachine:
             return []
 
 
+TERMINAL_STATUS = "started in Terminal (sudo required for vmnet)"
+
+
+def start_in_terminal(m: Machine, machine_dir: Path, qemu_dir: str) -> Path:
+    """vmnet needs root: write the launcher (sudo prefix inside) and let Terminal
+    run it so it can prompt for the password. No pid tracking."""
+    machine_dir = Path(machine_dir)
+    machine_dir.mkdir(parents=True, exist_ok=True)
+    launcher, _argv = command.write_launcher(m, qemu_dir, str(machine_dir))
+    subprocess.Popen(["open", "-a", "Terminal", str(launcher)], cwd=str(machine_dir))
+    return launcher
+
+
 def start_machine(m: Machine, machine_dir: Path, qemu_dir: str) -> RunningMachine:
     """Write the launcher, then Popen(argv, cwd=machine_dir) with output to last-run.log."""
     machine_dir = Path(machine_dir)
@@ -86,6 +99,7 @@ class MainWindow(tk.Tk):
         self.library = Library(settings.library_dir)
         self.running: dict[str, RunningMachine] = {}
         self.finished: dict[str, RunningMachine] = {}
+        self.terminal_started: dict[str, float] = {}   # vmnet machines started via Terminal (no pid)
         self.title("Qemu-GUI -- PowerMac G3 (g3beige)")
         self.geometry("1100x640")
         self.minsize(860, 480)
@@ -228,7 +242,11 @@ class MainWindow(tk.Tk):
     def _refresh_run_status(self, name: str):
         r = self.running.get(name) or self.finished.get(name)
         if not r:
-            self.run_status.config(text="not running")
+            if name in self.terminal_started:
+                self.run_status.config(text=f"{TERMINAL_STATUS} at "
+                                            f"{time.strftime('%H:%M:%S', time.localtime(self.terminal_started[name]))}")
+            else:
+                self.run_status.config(text="not running")
             self._set_text(self.log, "")
             return
         if r.exit_code is None:
@@ -338,6 +356,19 @@ class MainWindow(tk.Tk):
         if errors:
             messagebox.showerror("Start", "The record has errors; fix them in Edit first:\n\n" +
                                  "\n".join(f"- {e}" for e in errors))
+            return None
+        if command.needs_sudo(m):
+            if paths.HOST_PLATFORM != "darwin":
+                messagebox.showerror("Start", "vmnet networking only exists on macOS.")
+                return None
+            try:
+                start_in_terminal(m, self.library.folder(m.name), self.settings.qemu_dir)
+            except OSError as e:
+                messagebox.showerror("Start", f"Could not open Terminal:\n{e}")
+                return None
+            self.terminal_started[m.name] = time.time()
+            self.finished.pop(m.name, None)
+            self.refresh_list(select=m.name)
             return None
         try:
             r = start_machine(m, self.library.folder(m.name), self.settings.qemu_dir)
