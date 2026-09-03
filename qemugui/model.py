@@ -305,7 +305,7 @@ class Machine:
         if d is None:
             return "empty"
         if not d.file:
-            return f"{d.kind}, no image yet"
+            return "empty"
         return f"replace {Path(d.file).name}"
 
     def effective_qemu_dir(self, settings_qemu_dir: str) -> str:
@@ -385,22 +385,20 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
         if s.kind not in DRIVE_KINDS:
             errors.append(f"SCSI id {s.id}: unknown kind '{s.kind}'.")
         if not s.file:
-            warnings.append(f"SCSI id {s.id}: no image file; the slot is skipped in the launcher.")
+            continue            # no image = empty slot, silently skipped
         if s.kind == "cdrom":
             scsi_cd = True
     if len(m.ata) != 4:
         errors.append("ATA table must have exactly 4 slots.")
     ata_cd_elsewhere = False
     for i, d in enumerate(m.ata):
-        if d is None:
-            continue
+        if d is None or not d.file:
+            continue            # no image = empty slot, silently skipped
         if d.kind not in DRIVE_KINDS:
             errors.append(f"ATA index {i}: unknown kind '{d.kind}'.")
-        if not d.file:
-            warnings.append(f"ATA index {i}: no image file; the slot is skipped in the launcher.")
         if d.kind == "cdrom" and i != 2:
             ata_cd_elsewhere = True
-    if ata_cd_elsewhere and m.ata[2] is None:
+    if ata_cd_elsewhere and (m.ata[2] is None or not m.ata[2].file):
         warnings.append("An ATA CD-ROM is configured but index 2 is empty: QEMU adds a medialess "
                         "phantom CD-ROM at index 2 itself, so put the CD at index 2.")
 

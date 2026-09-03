@@ -414,11 +414,16 @@ class Validation(unittest.TestCase):
         errors, _ = model.validate(m, None, "darwin", check_files=False)
         self.assertEqual(len(errors), 2)
 
-    def test_seeded_slot_without_image_is_warning_and_skipped(self):
+    def test_slot_without_image_is_silently_empty(self):
+        # user report 2026-09-03: "warning there is no image at ATA index 1. This is bogus."
         m = model.new_machine("Fresh", "macos8_9", None)
+        self.assertEqual(m.ata, [None, None, None, None])      # profiles seed no placeholders
+        m.ata[1] = model.AtaDrive("disk", "", "raw")           # type chosen, no image
+        m.scsi = [model.ScsiDrive(2, "cdrom", "", "raw", None)]
         errors, warnings = model.validate(m, None, "darwin", check_files=False)
         self.assertEqual(errors, [])
-        self.assertTrue(any("index 0: no image" in w for w in warnings))
+        self.assertFalse(any("no image" in w for w in warnings), warnings)
+        self.assertFalse(any("index 1" in w for w in warnings), warnings)
         argv = command.build_argv(m, "/q", "/m", "darwin")
         self.assertNotIn("-drive", argv)
 
@@ -439,7 +444,7 @@ class LibraryOps(unittest.TestCase):
             self.assertEqual(m.ram_mb, 512)
             self.assertIsNotNone(m.second_gpu)
             self.assertIsNone(m.onboard_romfile)  # no ROM in a None qemu_dir
-            self.assertEqual([d.kind if d else None for d in m.ata], ["disk", None, "cdrom", None])
+            self.assertEqual([d.kind if d else None for d in m.ata], [None, None, None, None])
             lib.save(m)
             (lib.folder("Mac OS 9") / "nvram.img").write_bytes(b"\0" * 8192)
             self.assertEqual(lib.names(), ["Mac OS 9"])
@@ -482,11 +487,10 @@ class AtaSlotZero(unittest.TestCase):
 
     def test_first_unfilled_ata_offers_seeded_index_0(self):
         m = model.new_machine("t", "macos8_9", None)
-        self.assertEqual(m.ata[0].kind, "disk")
-        self.assertEqual(m.ata[0].file, "")
+        m.ata[0] = model.AtaDrive("disk", "", "raw")      # a type-only row, as the editor once produced
         self.assertEqual(m.first_empty_ata(), 1)          # the old behaviour, kept for reference
         self.assertEqual(m.first_unfilled_ata(), 0)       # what the dialog must default to
-        self.assertEqual(m.ata_slot_status(0), "disk, no image yet")
+        self.assertEqual(m.ata_slot_status(0), "empty")
         self.assertEqual(m.ata_slot_status(1), "empty")
         m.ata[0] = model.AtaDrive("disk", "/x/9.2.img", "raw")
         self.assertEqual(m.first_unfilled_ata(), 1)

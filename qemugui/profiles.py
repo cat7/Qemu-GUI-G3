@@ -23,19 +23,19 @@ class Profile:
 PROFILES: dict[str, Profile] = {
     "macos8_9": Profile(
         "macos8_9", "Mac OS 8 / 9", 512, "sdl", True, "ati_mach_gt.rom",
-        ("disk", None, "cdrom", None),
+        (None, None, None, None),
         "OS 8.1 needs the SCSI CD or ATA CD at index 2."),
     "macosx": Profile(
         "macosx", "Mac OS X 10.x", 512, "sdl", True, "ati_mach_gt.rom",
-        ("disk", None, "cdrom", None),
+        (None, None, None, None),
         "Startup Disk in OS X delegates to the ROM: the bootable disk at index 0 wins."),
     "macosx_server": Profile(
         "macosx_server", "Mac OS X Server 1.x", 1024, "cocoa", False, "ati_mach_gt.rom",
-        ("disk", None, "cdrom", None),
+        (None, None, None, None),
         "The known-working configuration has no second graphics card."),
     "linux": Profile(
         "linux", "Linux", 256, "sdl", False, "ati_gt_fcode.rom",
-        (None, None, "cdrom", None), ""),
+        (None, None, None, None), ""),
     "custom": Profile(
         "custom", "Custom", 512, "sdl", False, None,
         (None, None, None, None), ""),

@@ -468,3 +468,14 @@ file browsed or typed into a row whose Type is still "(empty)" no longer
 gets dropped on save: the type is inferred from the extension (`.iso`,
 `.toast`, `.cdr`, `.dmg` = CD-ROM, else hard disk). Regression test
 `AtaSlotZero`; 42 tests pass.
+
+## Fix 2 (2026-09-03, main session): bogus "ATA index 1: no image file" warning
+
+User report: "It seems the GUI thinks indexing starts at 1? I get warning
+there is no image at ATA index 1. This is bogus." Indexing was 0-based all
+along; the warning fired for any row whose Type was set while its image
+field stayed empty (profiles seeded such placeholder rows at index 0 and 2,
+and the editor kept a type-only row alive). New rule everywhere: a row
+without an image IS an empty slot -- collected as `None`, no warning,
+skipped in the launcher; profiles seed no placeholders any more. Tests
+updated (`test_slot_without_image_is_silently_empty`); 42 pass.

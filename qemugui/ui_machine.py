@@ -110,8 +110,8 @@ class DriveRow:
     def get_ata(self) -> AtaDrive | None:
         self._infer_kind()
         k = KIND_BY_LABEL[self.kind.get()]
-        if not k:
-            return None
+        if not k or not self.file.get().strip():
+            return None         # a type without an image is an empty slot
         return AtaDrive(kind=k, file=self.file.get().strip(), format=self.format.get() or "raw")
 
     def set_scsi(self, d: ScsiDrive | None):
@@ -128,8 +128,8 @@ class DriveRow:
     def get_scsi(self, sid: int) -> ScsiDrive | None:
         self._infer_kind()
         k = KIND_BY_LABEL[self.kind.get()]
-        if not k:
-            return None
+        if not k or not self.file.get().strip():
+            return None         # a type without an image is an empty slot
         ident = None
         if self.send_identity.get():
             ident = Identity(self.vendor.get().strip(), self.product.get().strip(), self.ver.get().strip())
