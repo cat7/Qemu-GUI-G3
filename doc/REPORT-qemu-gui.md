@@ -479,3 +479,16 @@ and the editor kept a type-only row alive). New rule everywhere: a row
 without an image IS an empty slot -- collected as `None`, no warning,
 skipped in the launcher; profiles seed no placeholders any more. Tests
 updated (`test_slot_without_image_is_silently_empty`); 42 pass.
+
+## Fix 3 (2026-09-03, main session): vmnet launchers ask for the password once
+
+The generated `run.command` for a vmnet machine ran the binary under sudo
+and finished with a `sudo chown` of `nvram.img`/`pram.img`. On any run
+longer than sudo's default 5-minute ticket, that tail prompted for the
+password a SECOND time, in the middle of the guest's own terminal output
+(observed on a real bridged run). The launcher now takes the ticket once
+with `sudo -v`, refreshes it every 60 s in a background loop for as long
+as the script lives, kills that loop on exit, and uses `sudo -n chown` so
+the tail can never prompt at all. Test
+`test_vmnet_command_has_sudo_prefix_and_chown_tail` extended to assert the
+keep-alive, its teardown, and the ordering; 42 tests pass.

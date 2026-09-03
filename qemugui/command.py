@@ -149,7 +149,15 @@ def group_options(argv: list[str]) -> list[list[str]]:
 SUDO_NOTE = ("# vmnet networking needs root: the binary runs under sudo (Terminal asks for "
              "the password). Files QEMU creates under sudo are root-owned, so they are "
              "given back to the user afterwards.")
-CHOWN_LINE = 'sudo chown "${SUDO_USER:-$(id -un)}" nvram.img pram.img 2>/dev/null'
+# Ask for the password ONCE. Without the keep-alive, sudo's ticket expires
+# during any run longer than its timeout (5 minutes by default) and the chown
+# below prompts a second time, in the middle of the guest's own output.
+SUDO_KEEPALIVE = ('sudo -v\n'
+                  'while true; do sudo -n true; sleep 60; '
+                  'kill -0 "$$" 2>/dev/null || exit; done &\n'
+                  'SUDO_KEEPALIVE_PID=$!')
+CHOWN_LINE = ('kill "$SUDO_KEEPALIVE_PID" 2>/dev/null\n'
+              'sudo -n chown "${SUDO_USER:-$(id -un)}" nvram.img pram.img 2>/dev/null')
 
 
 def render_shell(argv: list[str], sudo: bool = False) -> str:
@@ -158,7 +166,7 @@ def render_shell(argv: list[str], sudo: bool = False) -> str:
              'cd "$(dirname "$0")"',
              ""]
     if sudo:
-        lines.append(SUDO_NOTE)
+        lines += [SUDO_NOTE, SUDO_KEEPALIVE, ""]
     lines.append(("sudo " if sudo else "") + shlex.quote(argv[0]) + " \\")
     groups = group_options(argv)
     for i, g in enumerate(groups):

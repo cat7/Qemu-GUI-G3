@@ -292,9 +292,16 @@ class Networking(unittest.TestCase):
         lines = text.splitlines()
         self.assertIn("sudo /Applications/qemu-system-ppc-g3-mac-os/qemu-system-ppc \\", lines)
         self.assertIn("-nic vmnet-bridged,ifname=en0,model=bmac,mac=00:05:02:12:34:56 \\", lines)
-        self.assertTrue(lines[-1].startswith("sudo chown "), lines[-1])
+        self.assertTrue(lines[-1].startswith("sudo -n chown "), lines[-1])
         self.assertIn("nvram.img pram.img", lines[-1])
         self.assertIn("SUDO_USER", lines[-1])
+        # one password prompt only: the ticket is refreshed while the guest runs,
+        # so the chown at the end cannot prompt again mid-run (-n proves it never will)
+        self.assertIn("sudo -v", lines)
+        self.assertTrue(any("SUDO_KEEPALIVE_PID=$!" in ln for ln in lines), text)
+        self.assertTrue(any(ln.startswith('kill "$SUDO_KEEPALIVE_PID"') for ln in lines), text)
+        self.assertLess(lines.index("sudo -v"),
+                        [i for i, ln in enumerate(lines) if ln.startswith("sudo /")][0])
         # the argv used by Popen never contains sudo
         argv = command.build_argv(m, "", "/m", "darwin")
         self.assertNotIn("sudo", argv[0])
