@@ -321,7 +321,7 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
         if s.kind not in DRIVE_KINDS:
             errors.append(f"SCSI id {s.id}: unknown kind '{s.kind}'.")
         if not s.file:
-            errors.append(f"SCSI id {s.id}: no image file.")
+            warnings.append(f"SCSI id {s.id}: no image file; the slot is skipped in the launcher.")
         if s.kind == "cdrom":
             scsi_cd = True
     if len(m.ata) != 4:
@@ -333,7 +333,7 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
         if d.kind not in DRIVE_KINDS:
             errors.append(f"ATA index {i}: unknown kind '{d.kind}'.")
         if not d.file:
-            errors.append(f"ATA index {i}: no image file.")
+            warnings.append(f"ATA index {i}: no image file; the slot is skipped in the launcher.")
         if d.kind == "cdrom" and i != 2:
             ata_cd_elsewhere = True
     if ata_cd_elsewhere and m.ata[2] is None:

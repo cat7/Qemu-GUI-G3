@@ -309,6 +309,14 @@ class Validation(unittest.TestCase):
         errors, _ = model.validate(m, None, "darwin", check_files=False)
         self.assertEqual(len(errors), 2)
 
+    def test_seeded_slot_without_image_is_warning_and_skipped(self):
+        m = model.new_machine("Fresh", "macos8_9", None)
+        errors, warnings = model.validate(m, None, "darwin", check_files=False)
+        self.assertEqual(errors, [])
+        self.assertTrue(any("index 0: no image" in w for w in warnings))
+        argv = command.build_argv(m, "/q", "/m", "darwin")
+        self.assertNotIn("-drive", argv)
+
     def test_missing_image_is_warning_not_error(self):
         m = load_fixture("mac-os.json")
         m.ata[0] = AtaDrive("disk", "/Volumes/Unmounted/x.img")

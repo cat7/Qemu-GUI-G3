@@ -87,13 +87,15 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
         argv += ["-nic", f"user,model=bmac,mac={m.network.mac}"]
 
     for index, d in enumerate(m.ata):
-        if d is None:
-            continue
+        if d is None or not d.file:
+            continue  # empty slot, or a profile-seeded slot with no image yet
         media = "cdrom" if d.kind == "cdrom" else "disk"
         argv += ["-drive", f"file={qopt(_path(d.file, machine_dir, platform))},"
                            f"format={d.format or 'raw'},media={media},index={index}"]
 
     for s in sorted(m.scsi, key=lambda x: x.id):
+        if not s.file:
+            continue
         prefix = "scd" if s.kind == "cdrom" else "shd"
         drive_id = f"{prefix}{s.id}"
         dev = "scsi-cd" if s.kind == "cdrom" else "scsi-hd"
