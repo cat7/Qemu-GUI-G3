@@ -456,3 +456,64 @@ and re-generating the fixtures; make that easy (one command each).
 - [ ] second graphics card selectable (None / ATI Rage 128 Pro with ROM
       and slot)
 - [ ] source lives only in `/Users/hsp/src/claude-code/Qemu-GUI`, committed
+
+## Addendum 1 (2026-09-03, after the first build): SCSI id 7 and networking modes
+
+User message, verbatim: "you forgot to mention scsi 7 is the machine itself.
+and let it add the option to run with user and vmnet networking in macOS
+and tap networking in the windows build."
+
+### SCSI id 7
+
+The SCSI table shows **8 rows, ids 0..7**. Row 7 is fixed, non-editable,
+labelled `7  --  the Macintosh itself (MESH controller)`. It is never
+written to `machine.json`; loading a record whose `scsi` list contains
+id 7 is a validation error ("SCSI id 7 is the computer").
+
+### Networking modes
+
+`network.mode` gains values. All modes attach the onboard bmac through the
+`-nic` front-end (`macio.c` only instantiates bmac when a nic with
+`model=bmac` exists, so `-netdev`+`-device bmac` is NOT an option):
+
+| mode | platforms | emitted |
+|---|---|---|
+| `none` | all | `-nic none` |
+| `user` | all | `-nic user,model=bmac,mac=<mac>` (today's default) |
+| `vmnet-bridged` | macOS | `-nic vmnet-bridged,ifname=<ifname>,model=bmac,mac=<mac>` |
+| `vmnet-shared` | macOS | `-nic vmnet-shared,model=bmac,mac=<mac>` |
+| `vmnet-host` | macOS | `-nic vmnet-host,model=bmac,mac=<mac>` |
+| `tap` | Windows | `-nic tap,ifname=<ifname>,model=bmac,mac=<mac>` |
+
+Record: `"network": {"mode": "vmnet-bridged", "mac": "...", "ifname": "en0"}`
+(`ifname` present for the two modes that need it; default `en0` on macOS,
+empty on Windows where it must be the TAP-Windows adapter's name as shown
+in Network Connections). The editor shows only the modes valid for the
+host it runs on, plus whatever the record already holds (a record made on
+the other platform must still load and save unchanged). `command.py`
+emits whatever the record says regardless of host; validation warns
+"mode X is for macOS/Windows" when it does not match the target platform.
+
+**vmnet needs root on macOS** (the backends require the
+`com.apple.vm.networking` entitlement or root). Handle it like the user's
+previous GUI did, but without the GUI touching the password:
+- the generated `run.command` prefixes the binary with `sudo ` when the
+  mode is any `vmnet-*` (`sudo /Applications/.../qemu-system-ppc \`);
+- **Start** for such a machine does not `Popen` the binary; it writes the
+  launcher and runs `open -a Terminal <machine>/run.command` so Terminal
+  prompts for the password. Status line says "started in Terminal (sudo
+  required for vmnet)"; no pid tracking in that case.
+- Note in the UI: files QEMU creates under sudo (`nvram.img`, `pram.img`,
+  `last-run.log`) become root-owned; the launcher should therefore end with
+  `chown "$(id -un)" nvram.img pram.img 2>/dev/null` guarded by
+  `[ -n "$SUDO_USER" ]` -- put `chown "$SUDO_USER" ...` after the QEMU line.
+  Write exactly what you emit into the README.
+
+Windows tap: `.bat` gets no sudo; the TAP adapter must exist beforehand
+(OpenVPN's TAP-Windows). Put the adapter-name requirement in the README.
+
+Tests to add: one per new mode (token check), the sudo prefix + chown
+tail in the `.command` for vmnet-bridged, absence of both in the `.bat`,
+the id-7 validation error, and the cross-platform load/save round trip.
+No smoke boot is needed for this addendum (vmnet would need sudo);
+re-run the existing test suite and the fixture renders.
