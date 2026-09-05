@@ -8,8 +8,9 @@ Two rules with teeth:
 
 * **Nothing is ever filled in for you.** Every field that names a file starts
   empty and stays empty until it is chosen, the Mac's own ROM included.
-* A file is picked with one control: the field *is* the chooser. There is no
-  separate label and no separate button beside it.
+* A file field is one control: a path can be typed or pasted straight into
+  it, and double-clicking it opens the chooser. No separate label, no
+  separate button beside it.
 """
 
 from __future__ import annotations
@@ -51,20 +52,28 @@ def browse_file(parent, var: tk.StringVar, filetypes, fallback: Path | str | Non
 
 
 class FilePicker:
-    """One control for one file: it shows what has been chosen and opens the
-    chooser when clicked. Empty until somebody picks something."""
+    """One control for one file: type a path into it, paste one into it, or
+    double-click it to go and find one. Empty until somebody fills it in.
 
-    PLACEHOLDER = "Click to choose a file…"
+    There is still no separate label and no separate button beside it -- the
+    field is both the chooser and the place the path can be edited by hand.
+    """
+
+    PLACEHOLDER = "Type or paste a path, or double-click to choose a file…"
 
     def __init__(self, master, var: tk.StringVar, filetypes, width: int = 40, fallback=None):
         self.var = var
         self.filetypes = filetypes
         self.fallback = fallback
         self.shown = tk.StringVar()
-        self.entry = ttk.Entry(master, textvariable=self.shown, width=width,
-                               state="readonly", cursor="hand2")
-        for seq in ("<Button-1>", "<Return>", "<space>"):
-            self.entry.bind(seq, self._browse)
+        self.placeholder_shown = False
+        self._quiet = False          # our own writes must not reach the record
+        self._focused = False
+        self.entry = ttk.Entry(master, textvariable=self.shown, width=width)
+        self.entry.bind("<Double-Button-1>", self._browse)
+        self.entry.bind("<FocusIn>", self._focus_in)
+        self.entry.bind("<FocusOut>", self._focus_out)
+        self.shown.trace_add("write", self._typed)
         self.var.trace_add("write", lambda *_a: self._refresh())
         self._refresh()
 
@@ -72,12 +81,44 @@ class FilePicker:
         self.entry.grid(**kw)
         return self
 
+    # -------- the grey prompt, which is never part of the value
+    def _show(self, text: str, placeholder: bool) -> None:
+        self._quiet = True
+        self.shown.set(text)
+        self._quiet = False
+        self.placeholder_shown = placeholder
+        self.entry.configure(foreground=GREY if placeholder else "")
+
+    def _typed(self, *_a) -> None:
+        if self._quiet:
+            return
+        self.placeholder_shown = False
+        self.entry.configure(foreground="")
+        if self.shown.get() != self.var.get():
+            self.var.set(self.shown.get())      # what is typed is what is kept
+
     def _refresh(self) -> None:
-        value = self.var.get().strip()
-        self.shown.set(value or self.PLACEHOLDER)
+        value = self.var.get()
         if value:
+            if self.shown.get() != value:
+                self._show(value, placeholder=False)
             # a long path is shown from its end, where the file's name is
             self.entry.xview_moveto(1.0)
+        elif self._focused:
+            if self.placeholder_shown or self.shown.get():
+                self._show("", placeholder=False)
+        else:
+            self._show(self.PLACEHOLDER, placeholder=True)
+
+    def _focus_in(self, _e=None):
+        self._focused = True
+        if self.placeholder_shown:
+            self._show("", placeholder=False)
+
+    def _focus_out(self, _e=None):
+        self._focused = False
+        if not self.var.get():
+            self._show(self.PLACEHOLDER, placeholder=True)
 
     def _browse(self, _e=None):
         fb = self.fallback() if callable(self.fallback) else self.fallback
