@@ -16,7 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
-from qemugui import command, model, paths  # noqa: E402
+from qemugui import command, model, paths, profiles  # noqa: E402
 from qemugui.model import Machine, AtaDrive, ScsiDrive, Identity, Floppy, SecondGpu, Governor, Network  # noqa: E402
 
 FIXTURES = HERE / "fixtures"
@@ -444,7 +444,7 @@ class Validation(unittest.TestCase):
 
     def test_slot_without_image_is_silently_empty(self):
         # user report 2026-09-03: "warning there is no image at ATA index 1. This is bogus."
-        m = model.new_machine("Fresh", "macos8_9", None)
+        m = model.new_machine("Fresh", "macos8_9")
         self.assertEqual(m.ata, [None, None, None, None])      # profiles seed no placeholders
         m.ata[1] = model.AtaDrive("disk", "", "raw")           # type chosen, no image
         m.scsi = [model.ScsiDrive(2, "cdrom", "", "raw", None)]
@@ -470,10 +470,10 @@ class LibraryOps(unittest.TestCase):
     def test_create_save_duplicate_delete(self):
         with tempfile.TemporaryDirectory() as td:
             lib = model.Library(td)
-            m = model.new_machine("Mac OS 9", "macos8_9", None)
+            m = model.new_machine("Mac OS 9", "macos8_9")
             self.assertEqual(m.ram_mb, 512)
             self.assertIsNotNone(m.second_gpu)
-            self.assertIsNone(m.onboard_romfile)  # no ROM in a None qemu_dir
+            self.assertIsNone(m.onboard_romfile)  # no file is ever chosen for you
             self.assertEqual([d.kind if d else None for d in m.ata], [None, None, None, None])
             lib.save(m)
             (lib.folder("Mac OS 9") / "nvram.img").write_bytes(b"\0" * 8192)
@@ -516,7 +516,7 @@ class AtaSlotZero(unittest.TestCase):
     dialog offered only the first *empty* slot, so index 0 was never offered."""
 
     def test_first_unfilled_ata_offers_seeded_index_0(self):
-        m = model.new_machine("t", "macos8_9", None)
+        m = model.new_machine("t", "macos8_9")
         m.ata[0] = model.AtaDrive("disk", "", "raw")      # a type-only row, as the editor once produced
         self.assertEqual(m.first_empty_ata(), 1)          # the old behaviour, kept for reference
         self.assertEqual(m.first_unfilled_ata(), 0)       # what the dialog must default to
@@ -525,3 +525,103 @@ class AtaSlotZero(unittest.TestCase):
         m.ata[0] = model.AtaDrive("disk", "/x/9.2.img", "raw")
         self.assertEqual(m.first_unfilled_ata(), 1)
         self.assertTrue(m.ata_slot_status(0).startswith("replace 9.2.img"))
+
+
+class NothingIsChosenForYou(unittest.TestCase):
+    """User instruction 2026-09-05: "the gui has self-selected files again,
+    like the powermac rom, the ati mach rom. Make it stop doing these
+    self-selections overal."
+
+    So: no field that names a file is ever filled in by the program, for any
+    profile, whatever files happen to be sitting beside the emulator."""
+
+    def test_a_new_machine_has_every_file_field_empty(self):
+        for profile_id in profiles.profile_ids():
+            m = model.new_machine("Fresh", profile_id)
+            for field, value in model.file_fields(m).items():
+                self.assertEqual(value, "", f"{profile_id}: {field} was filled in")
+            self.assertEqual(m.rom, "")
+            self.assertIsNone(m.onboard_romfile)
+            self.assertEqual(m.notes, "")
+            if m.second_gpu:
+                self.assertIsNone(m.second_gpu.romfile)
+
+    def test_an_empty_record_names_no_files_either(self):
+        self.assertEqual(model.Machine().rom, "")
+        self.assertIsNone(model.SecondGpu().romfile)
+        self.assertEqual(model.file_fields(model.Machine()),
+                         {"rom": "", "onboard_romfile": "", "second_gpu.romfile": "",
+                          "floppy": "", "ata[0]": "", "ata[1]": "", "ata[2]": "", "ata[3]": ""})
+
+    def test_a_likely_looking_file_beside_the_emulator_is_not_picked_up(self):
+        """The positive control for the test above: the files that used to be
+        offered are really there, and are still not chosen."""
+        with tempfile.TemporaryDirectory() as td:
+            here = Path(td)
+            for name in ("PowerMacG3v3.ROM", "ati_mach_gt.rom", "ati_gt_fcode.rom",
+                         "ati_nexus128_103_pci.rom", "qemu-system-ppc"):
+                (here / name).write_bytes(b"x")
+            paths.use_install_dir(here)
+            try:
+                self.assertTrue(paths.has_qemu(here, "darwin"))     # a real install folder
+                m = model.new_machine("Fresh", "macos8_9")
+                self.assertEqual(set(model.file_fields(m).values()), {""})
+            finally:
+                paths.use_install_dir(None)
+
+    def test_new_machine_cannot_go_looking(self):
+        """It is not given a folder to search, so it cannot search one."""
+        import inspect
+        self.assertEqual(list(inspect.signature(model.new_machine).parameters),
+                         ["name", "profile_id"])
+
+    def test_no_default_rom_names_are_left_in_the_record_layer(self):
+        for gone in ("DEFAULT_ROM", "DEFAULT_SECOND_GPU_ROM"):
+            self.assertFalse(hasattr(profiles, gone), gone)
+        for src in ("profiles.py", "model.py"):
+            text = (HERE.parent / "qemugui" / src).read_text()
+            for name in ("PowerMacG3v3.ROM", "ati_mach_gt.rom", "ati_gt_fcode.rom",
+                         "ati_nexus128_103_pci.rom"):
+                self.assertNotIn(name, text, f"{src} still names {name}")
+
+    def test_a_machine_without_a_rom_saves_but_will_not_start(self):
+        """Half-finished is allowed; starting half-finished is not."""
+        m = model.new_machine("Fresh", "macos8_9")
+        errors, _warnings = model.validate(m, None, "darwin", check_files=False)
+        self.assertEqual(errors, [])                       # Save is not blocked
+        blockers = model.start_blockers(m)
+        self.assertEqual(len(blockers), 1)
+        self.assertIn("no ROM", blockers[0])
+        m.rom = "PowerMacG3v3.ROM"
+        self.assertEqual(model.start_blockers(m), [])
+
+    def test_no_rom_means_no_bios_option_rather_than_a_guess(self):
+        m = model.new_machine("Fresh", "macos8_9")
+        argv = command.build_argv(m, "/install", "/m", "darwin")
+        self.assertNotIn("-bios", argv)
+        self.assertFalse(any("/install" in t for t in argv[1:]), argv)
+        m.rom = "PowerMacG3v3.ROM"
+        argv = command.build_argv(m, "/install", "/m", "darwin")
+        self.assertEqual(argv[argv.index("-bios") + 1], "/install/PowerMacG3v3.ROM")
+
+
+class DisplayChoice(unittest.TestCase):
+    """The window on this computer: cocoa is offered first and is what a new
+    machine starts with (2026-09-05)."""
+
+    def test_cocoa_is_first_on_a_mac(self):
+        self.assertEqual(model.DISPLAYS["darwin"][0], "cocoa")
+        self.assertEqual(model.default_display("darwin"), "cocoa")
+
+    def test_a_new_machine_starts_on_cocoa_on_a_mac(self):
+        self.assertEqual(model.Machine().display, "cocoa")
+        if paths.HOST_PLATFORM == "darwin":
+            self.assertEqual(model.new_machine("Fresh", "macos8_9").display, "cocoa")
+
+    def test_the_other_platforms_keep_a_window_that_exists_there(self):
+        self.assertEqual(model.default_display("win32"), "sdl")
+        self.assertEqual(model.default_display("linux"), "sdl")
+        m = model.Machine(display=model.default_display("win32"))
+        errors, warnings = model.validate(m, None, "win32", check_files=False)
+        self.assertEqual(errors, [])
+        self.assertFalse(any("cocoa" in w for w in warnings), warnings)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Qemu-GUI: start an emulated PowerMac G3.
+"""Qemu-system-ppc GUI: start an emulated PowerMac G3.
 
-Qemu-GUI runs from the folder that holds qemu-system-ppc and keeps its
+Qemu-system-ppc GUI runs from the folder that holds qemu-system-ppc and keeps its
 machines in a "Machines" folder next to itself. There is nothing to
 configure and nothing to point at.
 
@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from qemugui import paths  # noqa: E402
 
 NO_TKINTER = """\
-Qemu-GUI needs Python's tkinter, and this Python does not have it.
+Qemu-system-ppc GUI needs Python's tkinter, and this Python does not have it.
 
 On macOS, install Python from python.org (Homebrew's python3 has no tkinter).
 On Windows, re-run the python.org installer and tick "tcl/tk and IDLE".\
@@ -42,7 +42,7 @@ def report_problem_on_screen(message: str) -> None:
     try:
         root = tk.Tk()
         root.withdraw()
-        messagebox.showerror("Qemu-GUI", message)
+        messagebox.showerror("Qemu-system-ppc GUI", message)
         root.destroy()
     except Exception:      # no display: the terminal message stands
         pass

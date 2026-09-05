@@ -27,10 +27,12 @@ from .ui_dialogs import (NewMachineDialog, ask_name, confirm_delete, report_dele
                          confirm_clear_saved_settings, open_folder)
 from .ui_machine import MachineEditor
 
+APP_TITLE = "Qemu-system-ppc GUI"
+
 LOG_NAME = "last-run.log"
 LOG_TAIL = 20
 
-COMMAND_EXPLAINER = ("This is exactly what Qemu-GUI will run when you press Start. "
+COMMAND_EXPLAINER = ("This is exactly what will be run when you press Start. "
                      "You do not have to understand it; it is here so that nothing is hidden.")
 NO_MACHINE_TEXT = ("No machine chosen yet.\n\n"
                    "Press “New machine…” to set one up. A machine is one old Mac: "
@@ -84,7 +86,7 @@ TERMINAL_STATUS = "Started in a Terminal window, which will ask for your passwor
 def start_in_terminal(m: Machine, machine_dir: Path) -> Path:
     """Joining the real network needs an administrator password, and only a
     Terminal window can ask for one. Write the launcher and let Terminal run
-    it; Qemu-GUI never sees the password and cannot follow this one."""
+    it; the password is never seen here, and this run cannot be followed."""
     machine_dir = Path(machine_dir)
     machine_dir.mkdir(parents=True, exist_ok=True)
     launcher, _argv = command.write_launcher(m, qemu_dir(), str(machine_dir))
@@ -117,7 +119,7 @@ class MainWindow(tk.Tk):
         self.running: dict[str, RunningMachine] = {}
         self.finished: dict[str, RunningMachine] = {}
         self.terminal_started: dict[str, float] = {}
-        self.title("Qemu-GUI — run an old Mac")
+        self.title(APP_TITLE)
         self.geometry("1100x680")
         self.minsize(880, 520)
         self._build()
@@ -175,7 +177,7 @@ class MainWindow(tk.Tk):
         self.status = ttk.Label(right, text="", foreground="gray", justify="left")
         self.status.pack(anchor="w", pady=(2, 6))
 
-        ttk.Label(right, text="Notes about this machine").pack(anchor="w")
+        ttk.Label(right, text="My notes").pack(anchor="w")
         self.notes = tk.Text(right, height=4, wrap="word")
         self.notes.pack(fill="x")
         self.notes.config(state="disabled")
@@ -238,7 +240,7 @@ class MainWindow(tk.Tk):
         try:
             return self.library.load(name)
         except (OSError, ValueError, KeyError, TypeError) as e:
-            messagebox.showerror("Qemu-GUI", f"The settings for “{name}” could not be "
+            messagebox.showerror(APP_TITLE, f"The settings for “{name}” could not be "
                                              f"read, so it cannot be opened.\n\n{e}")
             return None
 
@@ -311,7 +313,7 @@ class MainWindow(tk.Tk):
         if not dlg.result:
             return
         name, profile_id = dlg.result
-        m = model.new_machine(name, profile_id, qemu_dir())
+        m = model.new_machine(name, profile_id)
         self.library.save(m)
         self._write_launcher(m)
         self.refresh_list(select=name)
@@ -377,7 +379,7 @@ class MainWindow(tk.Tk):
         try:
             command.write_launcher(m, qemu_dir(), str(self.library.folder(m.name)))
         except OSError as e:
-            messagebox.showerror("Qemu-GUI", "The start-up file for this machine could not be "
+            messagebox.showerror(APP_TITLE, "The start-up file for this machine could not be "
                                              f"written.\n\n{e}")
 
     def clear_saved_settings(self):
@@ -418,6 +420,7 @@ class MainWindow(tk.Tk):
             return None
         errors, _warnings = model.validate(m, qemu_dir(),
                                            machine_dir=str(self.library.folder(m.name)))
+        errors += model.start_blockers(m)
         if errors:
             messagebox.showerror("Start", "This machine cannot start yet:\n\n" +
                                  "\n".join(f"• {e}" for e in errors) +
@@ -477,7 +480,7 @@ class MainWindow(tk.Tk):
             if not messagebox.askyesno(
                     "Quit",
                     f"These Macs are still running: {names}.\n\nThey keep running if you quit "
-                    "Qemu-GUI; shut them down from inside their own windows to be safe.\n\n"
+                    "this program; shut them down from inside their own windows to be safe.\n\n"
                     "Quit anyway?"):
                 return
         self.destroy()

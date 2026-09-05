@@ -2,13 +2,18 @@
 
 No Tk in here. ``machine.json`` schema version 1 (see doc/HANDOFF-qemu-gui.md).
 
-Two rules this file exists to enforce:
+Three rules this file exists to enforce:
 
 * Machines live in the ``Machines`` folder next to the program. There is no
   configurable location and no per-machine emulator override.
 * **Nothing here ever deletes a disk image.** Deleting a machine removes the
-  handful of files Qemu-GUI itself wrote (see ``OWNED_FILES``) and leaves
+  handful of files the program itself wrote (see ``OWNED_FILES``) and leaves
   every other file, disk images above all, exactly where it is.
+* **Nothing here ever chooses a file.** Every field naming a file -- the
+  Mac's ROM, the graphics ROMs, hard disks, CDs, floppy disks -- starts empty
+  and stays empty until the person picks something. Nothing is guessed, and
+  nothing is filled in because a likely-looking file happens to sit beside
+  the emulator.
 """
 
 from __future__ import annotations
@@ -21,9 +26,9 @@ from pathlib import Path
 from typing import Any
 
 from . import paths
-from .profiles import (PROFILES, DEFAULT_ROM, DEFAULT_MAC, DEFAULT_SECOND_GPU_ADDR,
-                       DEFAULT_SECOND_GPU_ROM, DEFAULT_DISK_IDENTITY,
-                       DEFAULT_CDROM_IDENTITY, normalise_profile_id)
+from .profiles import (PROFILES, DEFAULT_MAC, DEFAULT_SECOND_GPU_ADDR,
+                       DEFAULT_DISK_IDENTITY, DEFAULT_CDROM_IDENTITY,
+                       normalise_profile_id)
 
 SCHEMA = 1
 NAME_RE = re.compile(r"^[A-Za-z0-9._ -]+$")
@@ -34,8 +39,8 @@ ADDR_RE = re.compile(r"^(0x[0-9A-Fa-f]{1,2}|[0-9]{1,2})(\.[0-7])?$")
 #
 # The four positions on the Mac's built-in drive cable, and the numbers on
 # its SCSI chain, are named for someone who has never heard of a bus or a
-# master/slave pair -- with the hardware term kept alongside so that someone
-# who has heard of them is never left guessing which position is which.
+# master/slave pair. The hardware term is kept alongside for the menus and
+# messages that have room for it.
 #
 # Each entry: (name, what it is for, what the hardware calls it).
 ATA_SLOTS = (
@@ -50,12 +55,6 @@ ATA_CD_SLOT = 2             # where a CD is expected
 
 def ata_slot_name(i: int) -> str:
     return ATA_SLOTS[i][0]
-
-
-def ata_slot_hint(i: int) -> str:
-    """The quiet second line: purpose first, hardware term in brackets."""
-    _, purpose, tech = ATA_SLOTS[i]
-    return f"{purpose}  ({tech})"
 
 
 def ata_slot_full(i: int) -> str:
@@ -81,7 +80,13 @@ SCSI_SELF_HINT = ("the Mac itself — its own SCSI controller answers on this nu
 
 DRIVE_KINDS = ("disk", "cdrom")
 FORMATS = ("raw", "qcow2")
-DISPLAYS = {"darwin": ("sdl", "cocoa"), "win32": ("sdl", "gtk"), "linux": ("sdl", "gtk")}
+DISPLAYS = {"darwin": ("cocoa", "sdl"), "win32": ("sdl", "gtk"), "linux": ("sdl", "gtk")}
+
+
+def default_display(platform: str = paths.HOST_PLATFORM) -> str:
+    """The first choice offered on this computer, which is what a new machine
+    starts with: ``cocoa`` on a Mac, ``sdl`` anywhere else."""
+    return DISPLAYS.get("win32" if paths.is_windows(platform) else platform, ("sdl",))[0]
 AUDIO_MODES = ("default", "sdl", "none")
 NETWORK_MODES = ("none", "user", "vmnet-bridged", "vmnet-shared", "vmnet-host", "tap")
 # platform each mode is meant for (None = all); "darwin" | "win32"
@@ -99,7 +104,7 @@ SECOND_GPU_EXPERIMENTAL = ("ati-vga", "VGA", "cirrus-vga")
 SAVED_SETTINGS_FILES = ("nvram.img", "pram.img")
 MANAGED_FILES = SAVED_SETTINGS_FILES     # old name, still used by the tools
 
-# The complete list of files Qemu-GUI is allowed to delete from a machine
+# The complete list of files Qemu-system-ppc GUI is allowed to delete from a machine
 # folder. Anything not on this list -- above all a disk image -- is left
 # alone, whatever it is called. This list is the whole safety story: it is
 # an allow-list, not a deny-list, so a new kind of file is safe by default.
@@ -187,7 +192,7 @@ class Floppy:
 class SecondGpu:
     device: str = "ati-rage128-pro"
     addr: str = DEFAULT_SECOND_GPU_ADDR
-    romfile: str | None = DEFAULT_SECOND_GPU_ROM
+    romfile: str | None = None
 
     def to_dict(self) -> dict:
         return {"device": self.device, "addr": self.addr, "romfile": self.romfile}
@@ -269,8 +274,8 @@ class Machine:
     profile: str = "custom"
     machine: str = "g3beige"
     ram_mb: int = 512
-    rom: str = DEFAULT_ROM
-    display: str = "sdl"
+    rom: str = ""                # chosen by the person; never guessed
+    display: str = "cocoa"
     audio: str = "default"
     onboard_romfile: str | None = None
     second_gpu: SecondGpu | None = None
@@ -318,8 +323,8 @@ class Machine:
             profile=normalise_profile_id(d.get("profile")),
             machine=str(d.get("machine", "g3beige")),
             ram_mb=int(d.get("ram_mb", 512)),
-            rom=str(d.get("rom") or DEFAULT_ROM),
-            display=str(d.get("display", "sdl")),
+            rom=str(d.get("rom") or ""),
+            display=str(d.get("display") or default_display()),
             audio=str(d.get("audio", "default")),
             onboard_romfile=(str(d["onboard_romfile"]) if d.get("onboard_romfile") else None),
             second_gpu=SecondGpu.from_dict(d.get("second_gpu")),
@@ -382,18 +387,42 @@ class Machine:
         return [f for _label, f in _image_files(self) if f]
 
 
-def new_machine(name: str, profile_id: str, qemu_dir: str | None) -> Machine:
-    """Seed a record from a system profile. Drive positions start empty: no
-    guessed disk or CD paths, ever. The onboard graphics ROM is seeded only
-    if that file is actually sitting next to the emulator."""
+def new_machine(name: str, profile_id: str) -> Machine:
+    """Seed a record from a system profile: the memory, and whether the extra
+    graphics card is fitted. Nothing that names a file is filled in -- not a
+    disk, not a CD, not the Mac's ROM, not a graphics ROM -- and the notes
+    start empty. The install folder is never searched for likely files."""
     p = PROFILES[normalise_profile_id(profile_id)]
-    m = Machine(name=name, profile=p.id, ram_mb=p.ram_mb, display=p.display, notes=p.notes)
-    if p.onboard_romfile and qemu_dir and (Path(qemu_dir) / p.onboard_romfile).is_file():
-        m.onboard_romfile = p.onboard_romfile
+    m = Machine(name=name, profile=p.id, ram_mb=p.ram_mb, display=default_display())
     if p.second_gpu:
         m.second_gpu = SecondGpu()
     m.ata = [None, None, None, None]
     return m
+
+
+def file_fields(m: Machine) -> dict[str, str]:
+    """Every field of a record that names a file, for the guard that says
+    none of them is ever filled in by the program."""
+    fields = {"rom": m.rom or "",
+              "onboard_romfile": m.onboard_romfile or "",
+              "second_gpu.romfile": (m.second_gpu.romfile or "") if m.second_gpu else "",
+              "floppy": m.floppy.file if m.floppy else ""}
+    for i, d in enumerate(m.ata):
+        fields[f"ata[{i}]"] = d.file if d else ""
+    for s in m.scsi:
+        fields[f"scsi[{s.id}]"] = s.file
+    return fields
+
+
+def start_blockers(m: Machine) -> list[str]:
+    """Reasons this machine cannot be started yet, in plain words.
+
+    Separate from :func:`validate` on purpose: a half-finished machine can be
+    saved and come back to another day, but it cannot be run."""
+    out = []
+    if not (m.rom or "").strip():
+        out.append("This machine has no ROM yet. Choose the Mac's ROM in its settings.")
+    return out
 
 
 def default_identity(kind: str) -> Identity:
@@ -426,7 +455,7 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
         warnings.append("The 'cocoa' window only exists on a Mac. Choose 'sdl' or 'gtk' here.")
     net = m.network
     if net.mode not in NETWORK_MODES:
-        errors.append(f"'{net.mode}' is not a network setting Qemu-GUI knows.")
+        errors.append(f"'{net.mode}' is not a network setting Qemu-system-ppc GUI knows.")
     else:
         if net.mode != "none" and not MAC_RE.match(net.mac):
             errors.append("The network card's hardware address has to look like "
@@ -692,7 +721,7 @@ def check_new_image_path(folder: Path | str, name: str, fmt: str) -> tuple[Path 
 
     Refusing to write over anything that already exists is the point of this
     function: a disk image can be a whole afternoon of installing an old
-    system, and Qemu-GUI never overwrites one.
+    system, and Qemu-system-ppc GUI never overwrites one.
     """
     name = (name or "").strip()
     if not name:
@@ -704,7 +733,7 @@ def check_new_image_path(folder: Path | str, name: str, fmt: str) -> tuple[Path 
     target = Path(folder) / name
     if target.exists() or target.is_symlink():
         return None, (f"There is already a file called {name} in this machine's folder. "
-                      "Qemu-GUI will not write over it, in case it is a disk you still "
+                      "Qemu-system-ppc GUI will not write over it, in case it is a disk you still "
                       "need. Choose another name.")
     return target, None
 

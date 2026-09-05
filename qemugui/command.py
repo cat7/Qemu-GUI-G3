@@ -15,9 +15,9 @@ import shlex
 from . import paths
 from .model import Machine
 
-HEADER_NOTE = ("Written by Qemu-GUI. Do not edit: this file is written again from "
-               "scratch every time the machine is saved or started, and your changes "
-               "would be lost. Change the machine in Qemu-GUI instead.")
+HEADER_NOTE = ("Written by Qemu-system-ppc GUI. Do not edit: this file is written again "
+               "from scratch every time the machine is saved or started, and your changes "
+               "would be lost. Change the machine in Qemu-system-ppc GUI instead.")
 
 AUDIO_DEFAULT = {"darwin": "coreaudio", "win32": "dsound"}
 
@@ -79,14 +79,17 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
                platform: str = paths.HOST_PLATFORM) -> list[str]:
     """The complete argv, first token = absolute path of the QEMU binary.
 
-    *qemu_dir* is the folder Qemu-GUI itself lives in; the caller passes it
-    in so this module stays free of any notion of where that is."""
+    *qemu_dir* is the folder the program itself lives in; the caller passes
+    it in so this module stays free of any notion of where that is."""
     qd = qemu_dir
     argv: list[str] = [paths.join_path(qd, paths.qemu_binary_name(platform), platform)]
 
     argv += ["-M", governor_option(m)]
     argv += ["-m", str(int(m.ram_mb))]
-    argv += ["-bios", _path(m.rom, qd, platform)]
+    if m.rom:
+        # No ROM chosen yet: the option is left out rather than pointing at a
+        # guess. Starting is refused separately, with a plain message.
+        argv += ["-bios", _path(m.rom, qd, platform)]
     argv += ["-display", m.display]
 
     audio = m.audio

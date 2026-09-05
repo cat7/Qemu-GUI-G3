@@ -2,7 +2,7 @@
 beside it, and the Machines folder beside it.
 
 There is no configurable QEMU folder and no configurable machine library.
-Qemu-GUI is a companion to one copy of ``qemu-system-ppc``: it lives in the
+Qemu-system-ppc GUI is a companion to one copy of ``qemu-system-ppc``: it lives in the
 same folder as that program, and keeps its machines in a ``Machines`` folder
 next to itself.
 
@@ -18,7 +18,7 @@ import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 
-APP_NAME = "Qemu-GUI"
+APP_NAME = "Qemu-system-ppc GUI"
 HOST_PLATFORM = sys.platform  # "darwin" | "win32" | "linux"
 
 MACHINES_DIR_NAME = "Machines"
@@ -44,7 +44,7 @@ def resolve_install_dir(*, frozen: bool, executable: str, source_root: str) -> P
 
     * running from source -- the folder holding ``qemu_gui.py``;
     * frozen inside a macOS application bundle -- ``sys.executable`` is
-      ``.../Qemu-GUI.app/Contents/MacOS/Qemu-GUI``, several levels below the
+      ``.../Qemu-system-ppc GUI.app/Contents/MacOS/Qemu-system-ppc GUI``, several levels below the
       folder the bundle itself sits in, so walk up out of the ``.app``;
     * frozen as a plain executable (Windows, Linux) -- the folder holding
       the executable.
@@ -145,7 +145,7 @@ To run this GUI, put it in a folder containing a "{binary}" application.\
 """
 
 UNWRITABLE_MESSAGE = """\
-Qemu-GUI cannot create the folder it keeps your machines in.
+Qemu-system-ppc GUI cannot create the folder it keeps your machines in.
 
 It tried to make a folder called "{name}" next to itself, in:
 
@@ -155,11 +155,11 @@ but it was not allowed to. The reason given was:
 
 {reason}
 
-That folder is probably read-only. Move Qemu-GUI and the emulator together
-into a place you can write to, such as your home folder, and open Qemu-GUI
+That folder is probably read-only. Move Qemu-system-ppc GUI and the emulator together
+into a place you can write to, such as your home folder, and open Qemu-system-ppc GUI
 again.
 
-Qemu-GUI will now close.\
+Qemu-system-ppc GUI will now close.\
 """
 
 
@@ -167,7 +167,7 @@ def startup_problem(platform: str = HOST_PLATFORM) -> str | None:
     """A plain-language reason the program cannot run where it is, or None.
 
     Refusing here is deliberate: there is no folder chooser and no degraded
-    mode. Qemu-GUI is a front end for the emulator sitting beside it.
+    mode. Qemu-system-ppc GUI is a front end for the emulator sitting beside it.
     """
     folder = install_dir()
     if not has_qemu(folder, platform):

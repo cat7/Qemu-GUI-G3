@@ -65,7 +65,7 @@ def confirm_delete(parent, name: str, will_go: list[str], will_stay: list[str],
     """Delete removes the record, the launcher and the saved settings. Disk
     images are never deleted, and this window says so before anything
     happens."""
-    text = (f"Remove “{name}” from Qemu-GUI?\n\n"
+    text = (f"Remove “{name}” from Qemu-system-ppc GUI?\n\n"
             "This deletes how the machine is set up, the file that starts it, and the "
             "settings the Mac itself had saved.")
     if will_stay:
@@ -73,7 +73,7 @@ def confirm_delete(parent, name: str, will_go: list[str], will_stay: list[str],
         subject = "Your disk images stay" if images else "These files stay"
         text += ("\n\n" + subject + " exactly where they are, untouched:\n\n" +
                  _bullets(will_stay) + f"\n\nin\n    {folder}\n\n"
-                 "Qemu-GUI never deletes a disk image. If you want the space back, "
+                 "A disk image is never deleted here. If you want the space back, "
                  "delete them yourself in the Finder once you are sure.")
     else:
         text += "\n\nThere are no disk images in this machine's folder."
@@ -86,7 +86,7 @@ def report_delete(parent, name: str, result: model.DeleteResult) -> None:
         return
     messagebox.showinfo(
         "Removed",
-        f"“{name}” is gone from Qemu-GUI.\n\nWhat was left untouched:\n\n" +
+        f"“{name}” is gone from Qemu-system-ppc GUI.\n\nWhat was left untouched:\n\n" +
         _bullets(result.kept) + f"\n\nYou will find them in\n    {result.folder}",
         parent=parent)
 
@@ -118,8 +118,9 @@ class NewMachineDialog(simpledialog.Dialog):
         self.hint.grid(row=3, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._hint())
         self._hint()
-        ttk.Label(master, text="This only sets sensible starting points. You choose the hard "
-                               "disk and the CD next, and you can change everything afterwards.",
+        ttk.Label(master, text="This only sets the memory and the graphics card. You choose "
+                               "the Mac's ROM, the hard disk and the CD next, and you can "
+                               "change everything afterwards.",
                   wraplength=380, foreground="gray", justify="left").grid(
             row=4, column=0, columnspan=2, sticky="w", padx=4, pady=(8, 4))
         return e
@@ -129,7 +130,7 @@ class NewMachineDialog(simpledialog.Dialog):
         bits = [f"{p.ram_mb} MB of memory"]
         if p.second_gpu:
             bits.append("an extra graphics card, which this system likes")
-        self.hint.config(text="Sets up: " + ", ".join(bits) + ("." if not p.notes else f". {p.notes}"))
+        self.hint.config(text="Sets up: " + ", ".join(bits) + ".")
 
     def validate(self):
         name = self.name_var.get().strip()
@@ -202,7 +203,7 @@ class CreateDiskDialog(simpledialog.Dialog):
                   foreground="gray", wraplength=420, justify="left").grid(
             row=r, column=1, sticky="w", padx=4)
         r += 1
-        ttk.Label(master, text="Kind of file:").grid(row=r, column=0, sticky="w", padx=4, pady=3)
+        ttk.Label(master, text="Format:").grid(row=r, column=0, sticky="w", padx=4, pady=3)
         self.fmt_var = tk.StringVar(value="raw")
         ttk.Combobox(master, textvariable=self.fmt_var, values=model.FORMATS, state="readonly",
                      width=8).grid(row=r, column=1, sticky="w", padx=4)
@@ -228,7 +229,8 @@ class CreateDiskDialog(simpledialog.Dialog):
         r += 1
         if not self.qemu_img.is_file():
             ttk.Label(master, text=f"Cannot make disks: the helper program "
-                                   f"{self.qemu_img.name} is not in the folder Qemu-GUI is in.",
+                                   f"{self.qemu_img.name} is not in the folder this program "
+                                   f"is in.",
                       foreground="#a00", wraplength=420, justify="left").grid(
                 row=r, column=0, columnspan=2, sticky="w", padx=4, pady=(8, 2))
         return None
@@ -249,8 +251,9 @@ class CreateDiskDialog(simpledialog.Dialog):
             return False
         if not self.qemu_img.is_file():
             messagebox.showerror("New hard disk",
-                                 f"Qemu-GUI needs the helper program “{self.qemu_img.name}” to "
-                                 "make a disk, and it is not in the folder Qemu-GUI is in:\n\n"
+                                 f"The helper program “{self.qemu_img.name}” is needed to "
+                                 "make a disk, and it is not in the folder this program is "
+                                 "in:\n\n"
                                  f"    {self.qemu_img.parent}\n\n"
                                  "It normally comes with the emulator.", parent=self)
             return False
@@ -288,4 +291,5 @@ def open_folder(path: Path) -> None:
         else:
             subprocess.Popen(["xdg-open", str(path)])
     except OSError as e:
-        messagebox.showerror("Qemu-GUI", f"That folder could not be opened.\n\n{e}")
+        messagebox.showerror("Qemu-system-ppc GUI",
+                             f"That folder could not be opened.\n\n{e}")
