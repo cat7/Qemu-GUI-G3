@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "name": "Linux",
-  "profile": "linux",
+  "system": "linux",
   "machine": "g3beige",
   "ram_mb": 256,
   "rom": "PowerMacG3v3.ROM",

@@ -112,7 +112,7 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
 
     for index, d in enumerate(m.ata):
         if d is None or not d.file:
-            continue  # empty slot, or a profile-seeded slot with no image yet
+            continue  # empty slot, or a seeded slot with no image yet
         media = "cdrom" if d.kind == "cdrom" else "disk"
         argv += ["-drive", f"file={qopt(_path(d.file, machine_dir, platform))},"
                            f"format={d.format or 'raw'},media={media},index={index}"]

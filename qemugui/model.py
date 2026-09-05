@@ -26,9 +26,9 @@ from pathlib import Path
 from typing import Any
 
 from . import paths
-from .profiles import (PROFILES, DEFAULT_MAC, DEFAULT_SECOND_GPU_ADDR,
-                       DEFAULT_DISK_IDENTITY, DEFAULT_CDROM_IDENTITY,
-                       normalise_profile_id)
+from .systems import (SYSTEMS, DEFAULT_MAC, DEFAULT_SECOND_GPU_ADDR,
+                      DEFAULT_DISK_IDENTITY, DEFAULT_CDROM_IDENTITY,
+                      normalise_system_id)
 
 SCHEMA = 1
 NAME_RE = re.compile(r"^[A-Za-z0-9._ -]+$")
@@ -270,7 +270,7 @@ class Governor:
 @dataclass
 class Machine:
     name: str = "New machine"
-    profile: str = "other"
+    system: str = "other"
     machine: str = "g3beige"
     ram_mb: int = 512
     rom: str = ""                # chosen by the person; never guessed
@@ -291,7 +291,7 @@ class Machine:
         return {
             "schema": SCHEMA,
             "name": self.name,
-            "profile": self.profile,
+            "system": self.system,
             "machine": self.machine,
             "ram_mb": self.ram_mb,
             "rom": self.rom,
@@ -319,7 +319,7 @@ class Machine:
         scsi = [s for s in (ScsiDrive.from_dict(x) for x in d.get("scsi") or []) if s]
         m = cls(
             name=str(d.get("name", "New machine")),
-            profile=normalise_profile_id(d.get("profile")),
+            system=normalise_system_id(d.get("system")),
             machine=str(d.get("machine", "g3beige")),
             ram_mb=int(d.get("ram_mb", 512)),
             rom=str(d.get("rom") or ""),
@@ -386,13 +386,13 @@ class Machine:
         return [f for _label, f in _image_files(self) if f]
 
 
-def new_machine(name: str, profile_id: str) -> Machine:
-    """Seed a record from a system profile: the memory, and whether the extra
+def new_machine(name: str, system_id: str) -> Machine:
+    """Seed a record from one of the five systems: the memory, and whether the extra
     graphics card is fitted. Nothing that names a file is filled in -- not a
     disk, not a CD, not the Mac's ROM, not a graphics ROM -- and the notes
     start empty. The install folder is never searched for likely files."""
-    p = PROFILES[normalise_profile_id(profile_id)]
-    m = Machine(name=name, profile=p.id, ram_mb=p.ram_mb, display=default_display())
+    p = SYSTEMS[normalise_system_id(system_id)]
+    m = Machine(name=name, system=p.id, ram_mb=p.ram_mb, display=default_display())
     if p.second_gpu:
         m.second_gpu = SecondGpu()
     m.ata = [None, None, None, None]

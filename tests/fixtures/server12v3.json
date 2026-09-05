@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "name": "OS X Server 1.2v3",
-  "profile": "osx_server_1_2v3",
+  "system": "osx_server_1_2v3",
   "machine": "g3beige",
   "ram_mb": 1024,
   "rom": "PowerMacG3v3.ROM",

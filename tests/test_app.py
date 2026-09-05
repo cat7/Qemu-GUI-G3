@@ -244,13 +244,13 @@ class TheEditorFillsNothingIn(unittest.TestCase):
     def test_the_editor_has_no_pre_filling_left_in_it(self):
         src = (ROOT / "qemugui" / "ui_machine.py").read_text()
         for gone in ("SecondGpu().romfile",          # seeded the card ROM
-                     "_reapply_profile",             # re-applied a profile's files
+                     "_reapply_profile",             # re-applied a system's files
                      "PowerMacG3v3"):                # a ROM name as a value
             self.assertNotIn(gone, src, gone)
 
-    def test_no_profile_carries_a_file_to_seed(self):
-        from qemugui import profiles
-        for p in profiles.PROFILES.values():
+    def test_no_system_carries_a_file_to_seed(self):
+        from qemugui import systems
+        for p in systems.SYSTEMS.values():
             for value in vars(p).values():
                 self.assertNotIn(".rom", str(value).lower(), f"{p.id}: {value}")
 

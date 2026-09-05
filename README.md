@@ -146,7 +146,7 @@ the first CD it finds; the Startup Disk control panel wins over both.
 them against the real, known-good command lines. `tests/test_app.py` covers
 where the program thinks it is installed, its refusal to start without the
 emulator, and the promise that no code path deletes or overwrites a disk
-image. Both run headless: `command.py`, `model.py`, `profiles.py` and
+image. Both run headless: `command.py`, `model.py`, `systems.py` and
 `paths.py` import no Tk.
 
 ## Packaging

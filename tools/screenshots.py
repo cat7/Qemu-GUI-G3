@@ -10,7 +10,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
 from qemugui import model, paths
-from qemugui.profiles import profile_ids
+from qemugui.systems import system_ids
 from qemugui.ui_main import MainWindow
 from qemugui.ui_machine import MachineEditor
 
@@ -33,7 +33,7 @@ def step1():
     capture(app, "screenshot-main.png")
     app.attributes("-topmost", False)
     # exactly what "New machine…" does: the settings window, Machine page
-    m = model.new_machine("", profile_ids()[0])
+    m = model.new_machine("", system_ids()[0])
     ed = MachineEditor(app, m, app.library, str(paths.install_dir()), lambda *a: None,
                        is_new=True)
     ed.lift(); ed.attributes("-topmost", True)

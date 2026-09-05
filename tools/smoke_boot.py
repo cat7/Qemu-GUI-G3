@@ -45,7 +45,7 @@ settings_file.parent.mkdir(parents=True, exist_ok=True)
 settings.save(settings_file)
 
 lib = model.Library()
-m = Machine(name="smoke", profile="other", ram_mb=512,
+m = Machine(name="smoke", system="other", ram_mb=512,
             rom=str(qemu_dir / "PowerMacG3v3.ROM"),
             display="cocoa", audio="none",
             onboard_romfile=str(qemu_dir / "ati_mach_gt.rom"),

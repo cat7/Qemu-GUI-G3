@@ -16,7 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
-from qemugui import command, model, paths, profiles  # noqa: E402
+from qemugui import command, model, paths, systems  # noqa: E402
 from qemugui.model import Machine, AtaDrive, ScsiDrive, Identity, Floppy, SecondGpu, Governor, Network  # noqa: E402
 
 FIXTURES = HERE / "fixtures"
@@ -390,7 +390,7 @@ class JsonRoundTrip(unittest.TestCase):
             self.assertEqual(json.loads(m.to_json())["schema"], model.SCHEMA)
 
     def test_full_record_round_trip(self):
-        m = Machine(name="Every field", profile="macosx_10_0_to_10_2", ram_mb=768, rom="/abs/rom.ROM",
+        m = Machine(name="Every field", system="macosx_10_0_to_10_2", ram_mb=768, rom="/abs/rom.ROM",
                     display="cocoa", audio="none",
                     onboard_romfile="ati_mach_gt.rom",
                     second_gpu=SecondGpu("ati-rage128-pro", "0x0f", "card.rom"),
@@ -408,14 +408,14 @@ class JsonRoundTrip(unittest.TestCase):
     def test_a_record_names_one_of_the_five_systems(self):
         """The stored id is the visible entry written plainly. Anything else
         is not translated -- it is "Other"."""
-        self.assertEqual(profiles.profile_ids(),
+        self.assertEqual(systems.system_ids(),
                          ["macos_8_to_9", "macosx_10_0_to_10_2", "osx_server_1_2v3",
                           "linux", "other"])
-        self.assertEqual([p.label for p in profiles.PROFILES.values()],
+        self.assertEqual([p.label for p in systems.SYSTEMS.values()],
                          ["Mac OS 8 to 9", "Mac OS X 10.0 to 10.2", "OSX Server 1.2v3",
                           "Linux", "Other"])
-        self.assertEqual(Machine.from_dict({"name": "x", "profile": "macos9"}).profile, "other")
-        self.assertEqual(Machine.from_dict({"name": "x"}).profile, "other")
+        self.assertEqual(Machine.from_dict({"name": "x", "system": "macos9"}).system, "other")
+        self.assertEqual(Machine.from_dict({"name": "x"}).system, "other")
 
 
 class Validation(unittest.TestCase):
@@ -453,7 +453,7 @@ class Validation(unittest.TestCase):
     def test_slot_without_image_is_silently_empty(self):
         # user report 2026-09-03: "warning there is no image at ATA index 1. This is bogus."
         m = model.new_machine("Fresh", "macos_8_to_9")
-        self.assertEqual(m.ata, [None, None, None, None])      # profiles seed no placeholders
+        self.assertEqual(m.ata, [None, None, None, None])      # systems seed no placeholders
         m.ata[1] = model.AtaDrive("disk", "", "raw")           # type chosen, no image
         m.scsi = [model.ScsiDrive(2, "cdrom", "", "raw", None)]
         errors, warnings = model.validate(m, None, "darwin", check_files=False)
@@ -520,7 +520,7 @@ if __name__ == "__main__":
 
 class AtaSlotZero(unittest.TestCase):
     """User report 2026-09-03: 'impossible to add a drive at ATA bus 0 master'.
-    Profiles seed index 0 as a placeholder (kind set, no file); the create-disk
+    A system seeded index 0 as a placeholder (kind set, no file); the create-disk
     dialog offered only the first *empty* slot, so index 0 was never offered."""
 
     def test_first_unfilled_ata_offers_seeded_index_0(self):
@@ -541,13 +541,13 @@ class NothingIsChosenForYou(unittest.TestCase):
     self-selections overal."
 
     So: no field that names a file is ever filled in by the program, for any
-    profile, whatever files happen to be sitting beside the emulator."""
+    system, whatever files happen to be sitting beside the emulator."""
 
     def test_a_new_machine_has_every_file_field_empty(self):
-        for profile_id in profiles.profile_ids():
-            m = model.new_machine("Fresh", profile_id)
+        for system_id in systems.system_ids():
+            m = model.new_machine("Fresh", system_id)
             for field, value in model.file_fields(m).items():
-                self.assertEqual(value, "", f"{profile_id}: {field} was filled in")
+                self.assertEqual(value, "", f"{system_id}: {field} was filled in")
             self.assertEqual(m.rom, "")
             self.assertIsNone(m.onboard_romfile)
             self.assertEqual(m.notes, "")
@@ -581,12 +581,12 @@ class NothingIsChosenForYou(unittest.TestCase):
         """It is not given a folder to search, so it cannot search one."""
         import inspect
         self.assertEqual(list(inspect.signature(model.new_machine).parameters),
-                         ["name", "profile_id"])
+                         ["name", "system_id"])
 
     def test_no_default_rom_names_are_left_in_the_record_layer(self):
         for gone in ("DEFAULT_ROM", "DEFAULT_SECOND_GPU_ROM"):
-            self.assertFalse(hasattr(profiles, gone), gone)
-        for src in ("profiles.py", "model.py"):
+            self.assertFalse(hasattr(systems, gone), gone)
+        for src in ("systems.py", "model.py"):
             text = (HERE.parent / "qemugui" / src).read_text()
             for name in ("PowerMacG3v3.ROM", "ati_mach_gt.rom", "ati_gt_fcode.rom",
                          "ati_nexus128_103_pci.rom"):

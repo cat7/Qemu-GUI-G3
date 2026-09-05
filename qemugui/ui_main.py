@@ -22,7 +22,7 @@ from tkinter import ttk, messagebox
 from . import command, model, paths
 from .model import Machine, Library
 from .paths import Settings
-from .profiles import PROFILES, profile_ids
+from .systems import SYSTEMS, system_ids
 from .ui_dialogs import ask_name, confirm_delete, report_delete, open_folder
 from .ui_machine import MachineEditor
 
@@ -198,7 +198,7 @@ class MainWindow(tk.Tk):
         for m in self.library.load_all():
             state = "running" if m.name in self.running else ""
             self.tree.insert("", "end", iid=m.name,
-                             values=(f"{m.name}   ({PROFILES[m.profile].label})", state))
+                             values=(f"{m.name}   ({SYSTEMS[m.system].label})", state))
         names = self.library.names()
         if current in names:
             self.tree.selection_set(current)
@@ -289,7 +289,7 @@ class MainWindow(tk.Tk):
         """No separate dialogue: the settings window opens on the Machine
         page with an empty Name and the System list, and the machine comes
         into being when it is saved. Cancel, and nothing has been made."""
-        m = model.new_machine("", profile_ids()[0])
+        m = model.new_machine("", system_ids()[0])
         MachineEditor(self, m, self.library, qemu_dir(), self._on_editor_save, is_new=True)
 
     def duplicate_machine(self):

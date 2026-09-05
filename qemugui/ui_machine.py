@@ -21,7 +21,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from . import model, paths
 from .model import Machine, AtaDrive, ScsiDrive, Identity, Floppy, SecondGpu, Network, Governor
-from .profiles import PROFILES, profile_labels, profile_by_label
+from .systems import SYSTEMS, system_labels, system_by_label
 from .ui_dialogs import show_validation, CreateDiskDialog
 
 KIND_LABELS = {"": "Empty", "disk": "Hard disk", "cdrom": "CD"}
@@ -290,8 +290,8 @@ class MachineEditor(tk.Toplevel):
         self.name_entry.grid(row=r, column=1, sticky="ew", pady=4)
         r += 1
         ttk.Label(f, text="System:").grid(row=r, column=0, sticky="w", pady=4)
-        self.profile_var = tk.StringVar()
-        ttk.Combobox(f, textvariable=self.profile_var, values=profile_labels(), state="readonly",
+        self.system_var = tk.StringVar()
+        ttk.Combobox(f, textvariable=self.system_var, values=system_labels(), state="readonly",
                      width=26).grid(row=r, column=1, sticky="w", pady=4)
         r += 1
         ttk.Label(f, text="Memory:").grid(row=r, column=0, sticky="w", pady=4)
@@ -570,7 +570,7 @@ class MachineEditor(tk.Toplevel):
     # ---------------- load / collect
     def load(self, m: Machine):
         self.name_var.set(m.name)
-        self.profile_var.set(PROFILES[m.profile].label)
+        self.system_var.set(SYSTEMS[m.system].label)
         self.ram_var.set(str(m.ram_mb))
         self.rom_var.set(m.rom)
         self.display_var.set(m.display)
@@ -608,7 +608,7 @@ class MachineEditor(tk.Toplevel):
     def collect(self) -> Machine:
         m = self.machine.copy()
         m.name = self.name_var.get().strip()
-        m.profile = profile_by_label(self.profile_var.get()).id
+        m.system = system_by_label(self.system_var.get()).id
         try:
             m.ram_mb = int(self.ram_var.get().strip())
         except ValueError:
