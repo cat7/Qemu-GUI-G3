@@ -373,12 +373,12 @@ class MachineEditor(tk.Toplevel):
     def _build_advanced(self):
         f = self._tab("Advanced")
         f.columnconfigure(1, weight=1)
-        ttk.Label(f, text="Speed", font=("", 0, "bold")).grid(
+        ttk.Label(f, text="Speed limiter", font=("", 0, "bold")).grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.gov_mode = tk.StringVar(value="default")
-        ttk.Radiobutton(f, text="Normal", variable=self.gov_mode, value="default").grid(
+        ttk.Radiobutton(f, text="Normal (for Mac OS)", variable=self.gov_mode, value="default").grid(
             row=1, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text="Off", variable=self.gov_mode,
+        ttk.Radiobutton(f, text="Off (for Mac OS X)", variable=self.gov_mode,
                         value="off").grid(row=2, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(f, text="Fixed:", variable=self.gov_mode, value="mips").grid(
             row=3, column=0, sticky="w")
@@ -386,7 +386,7 @@ class MachineEditor(tk.Toplevel):
         ttk.Spinbox(f, textvariable=self.mips_var, from_=1, to=100000, width=8).grid(
             row=3, column=1, sticky="w")
         ttk.Separator(f).grid(row=4, column=0, columnspan=3, sticky="ew", pady=10)
-        ttk.Label(f, text="Extra options", font=("", 0, "bold")).grid(
+        ttk.Label(f, text="Additional command line arguments", font=("", 0, "bold")).grid(
             row=5, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.extra_var = tk.StringVar()
         ttk.Entry(f, textvariable=self.extra_var, width=70).grid(
