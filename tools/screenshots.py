@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Open the real GUI (MainWindow + mainloop) on a scratch install and capture
-the main window and the editor's Drives tab with `screencapture -x -R`.
+the main window and the Machine tab of a New machine, with
+`screencapture -x -R`.
 
     python tools/screenshots.py <install-dir> <out-dir>
 """
@@ -8,7 +9,8 @@ import subprocess, sys
 from pathlib import Path
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
-from qemugui import paths
+from qemugui import model, paths
+from qemugui.profiles import profile_ids
 from qemugui.ui_main import MainWindow
 from qemugui.ui_machine import MachineEditor
 
@@ -30,14 +32,15 @@ def step1():
     app.lift(); app.attributes("-topmost", True); app.update()
     capture(app, "screenshot-main.png")
     app.attributes("-topmost", False)
-    m = app.selected_machine()
-    ed = MachineEditor(app, m, app.library, str(paths.install_dir()), lambda *a: None)
-    ed.nb.select(2)  # Drives tab
+    # exactly what "New machine…" does: the settings window, Machine page
+    m = model.new_machine("", profile_ids()[0])
+    ed = MachineEditor(app, m, app.library, str(paths.install_dir()), lambda *a: None,
+                       is_new=True)
     ed.lift(); ed.attributes("-topmost", True)
     app.after(3000, lambda: step2(ed))
 
 def step2(ed):
-    capture(ed, "screenshot-drives-tab.png")
+    capture(ed, "screenshot-new-machine-tab.png")
     ed.destroy()
     app.after(500, app.destroy)
 

@@ -40,7 +40,19 @@ ticked, then `py qemu_gui.py`.
 
 There are no command-line options.
 
+## The main window
+
+On the left the machines, with **New machine…**, **Duplicate**, **Edit**,
+**Delete…**, **Open machine folder** and **Start this Mac**. On the right,
+for whichever machine is picked: how it ran and where it is kept, then
+**Command line constructed:** — the exact command Start will run — and
+**My notes** underneath it.
+
 ## The settings window
+
+**New machine…** opens this window straight away, on the Machine page, with
+Name empty and System on the first of the five. Nothing exists until Save;
+Cancel makes nothing.
 
 Five pages: **Machine** (name, system, memory, display, ROM, my notes),
 **Display** (the built-in graphics and the extra card), **Drives** (the four
@@ -73,12 +85,10 @@ a `.img`, a `.qcow2`, an `.iso`, your own notes — is left where it is, and
 the folder itself stays behind to hold them. The confirmation lists what will
 be kept, and where, before you press anything.
 
-"Forget saved settings…" deletes only `nvram.img` and `pram.img`.
-
 "Create new disk image…" refuses a name that already exists rather than
 writing over it.
 
-"Make a copy…" copies the settings only. The copy points at the same disk
+"Duplicate" copies the settings only. The copy points at the same disk
 image as the original — do not run both at once.
 
 Renaming a machine moves its folder; any image kept inside moves with it and
@@ -89,8 +99,9 @@ the record is re-pointed at the new place.
 No field that names a file is ever filled in by the program: not the Mac's
 ROM, not the graphics ROMs, not a hard disk, a CD or a floppy. Every one of
 them starts empty and stays empty until you pick something, whatever files
-happen to be sitting next to the emulator. A file field *is* its own chooser:
-click it and the file dialog opens, at a sensible folder.
+happen to be sitting next to the emulator. A file field *is* its own chooser,
+and is editable: type or paste a path into it, or double-click it to open the
+file dialog at a sensible folder.
 
 A new machine is therefore incomplete on purpose, and can be saved that way
 and finished another day. It will not start without a ROM: Start says so
@@ -194,6 +205,6 @@ beforehand, named exactly as it appears in Network Connections.
 - `tools/smoke_boot.py <scratch-dir> <qemu-dir> <iso>` — a real boot through
   the Start button, into a scratch folder, quit over QMP after 20 s.
 - `tools/screenshots.py <install-dir> <out-dir>` — the main window and the
-  Drives tab.
+  settings window.
 - `tools/render_fixture.py <machine.json> [platform] [machine-dir]` — print
   the launcher a record produces.

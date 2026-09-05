@@ -1,4 +1,6 @@
-"""The small windows: new machine, copy, the two confirmations, create a disk.
+"""The small windows: the name for a duplicate, the delete confirmation, and
+create a disk. A new machine is not one of them -- it opens the settings
+window straight away, on the Machine page.
 
 Every message here is written for someone who wants to run an old Mac and
 has never heard of a bus, a slot index or a device path.
@@ -12,7 +14,6 @@ from pathlib import Path
 from tkinter import ttk, messagebox, simpledialog
 
 from . import model, paths
-from .profiles import profile_labels, profile_by_label
 
 DISK_SIZES = ("1", "2", "4", "8", "10", "20")
 NAME_RULE = "Names can use letters, numbers, spaces and the characters . _ -"
@@ -32,25 +33,6 @@ def show_validation(parent, errors: list[str], warnings: list[str]) -> bool:
                 "\n\nSave it anyway?")
         return messagebox.askyesno("Worth knowing", text, parent=parent)
     return True
-
-
-def confirm_clear_saved_settings(parent, name: str, status: dict) -> bool:
-    """nvram.img / pram.img: the Mac's own memory of its settings."""
-    if not any(v is not None for v in status.values()):
-        messagebox.showinfo("Forget saved settings",
-                            f"“{name}” has not saved any settings of its own yet, so there "
-                            "is nothing to forget.", parent=parent)
-        return False
-    return messagebox.askyesno(
-        "Forget saved settings",
-        f"Make “{name}” forget the settings the Mac itself remembers: which disk it starts "
-        "from, the date and time, the screen depth, and the sound volume.\n\n"
-        "It works these out again by itself the next time you start it. The first start "
-        "afterwards can show a flashing question-mark disk until the Mac has found a "
-        "system to boot; starting from a CD once puts that right.\n\n"
-        "Your hard disks and CDs are not touched — nothing you have installed is lost.\n\n"
-        "Go ahead?",
-        icon="warning", parent=parent)
 
 
 def _bullets(files: list[str], limit: int = 20) -> str:
@@ -89,62 +71,6 @@ def report_delete(parent, name: str, result: model.DeleteResult) -> None:
         f"“{name}” is gone from Qemu-system-ppc GUI.\n\nWhat was left untouched:\n\n" +
         _bullets(result.kept) + f"\n\nYou will find them in\n    {result.folder}",
         parent=parent)
-
-
-class NewMachineDialog(simpledialog.Dialog):
-    """Ask for a name and which system is going on it."""
-
-    def __init__(self, parent, existing: list[str], title="New machine"):
-        self.existing = existing
-        self.result = None
-        super().__init__(parent, title)
-
-    def body(self, master):
-        ttk.Label(master, text="What would you like to call it?").grid(
-            row=0, column=0, sticky="w", padx=4, pady=(4, 0))
-        self.name_var = tk.StringVar(value="")
-        e = ttk.Entry(master, textvariable=self.name_var, width=34)
-        e.grid(row=0, column=1, sticky="ew", padx=4, pady=(4, 0))
-        ttk.Label(master, text="Anything you like — “Mac OS 9”, “my old Mac”.",
-                  foreground="gray").grid(row=1, column=1, sticky="w", padx=4)
-
-        ttk.Label(master, text="Which system are you going to run?").grid(
-            row=2, column=0, sticky="w", padx=4, pady=(10, 0))
-        self.profile_var = tk.StringVar(value=profile_labels()[0])
-        cb = ttk.Combobox(master, textvariable=self.profile_var, values=profile_labels(),
-                          state="readonly", width=32)
-        cb.grid(row=2, column=1, sticky="ew", padx=4, pady=(10, 0))
-        self.hint = ttk.Label(master, text="", wraplength=380, foreground="gray", justify="left")
-        self.hint.grid(row=3, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
-        cb.bind("<<ComboboxSelected>>", lambda _e: self._hint())
-        self._hint()
-        ttk.Label(master, text="This only sets the memory and the graphics card. You choose "
-                               "the Mac's ROM, the hard disk and the CD next, and you can "
-                               "change everything afterwards.",
-                  wraplength=380, foreground="gray", justify="left").grid(
-            row=4, column=0, columnspan=2, sticky="w", padx=4, pady=(8, 4))
-        return e
-
-    def _hint(self):
-        p = profile_by_label(self.profile_var.get())
-        bits = [f"{p.ram_mb} MB of memory"]
-        if p.second_gpu:
-            bits.append("an extra graphics card, which this system likes")
-        self.hint.config(text="Sets up: " + ", ".join(bits) + ".")
-
-    def validate(self):
-        name = self.name_var.get().strip()
-        if not model.NAME_RE.match(name or ""):
-            messagebox.showerror("That name will not work", NAME_RULE + ".", parent=self)
-            return False
-        if name in self.existing:
-            messagebox.showerror("That name is taken",
-                                 f"You already have a machine called “{name}”.", parent=self)
-            return False
-        return True
-
-    def apply(self):
-        self.result = (self.name_var.get().strip(), profile_by_label(self.profile_var.get()).id)
 
 
 def ask_name(parent, title: str, prompt: str, initial: str, existing: list[str]) -> str | None:

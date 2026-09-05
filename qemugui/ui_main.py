@@ -1,4 +1,5 @@
-"""The main window: the list of machines, what Start will run, and Start.
+"""The main window: the list of machines, the command line Start will run,
+and Start.
 
 ``start_machine()`` is the one code path that launches the emulator: it
 writes the launcher file and then runs the argument list directly with the
@@ -15,28 +16,21 @@ from __future__ import annotations
 import subprocess
 import time
 import tkinter as tk
-from collections import deque
 from pathlib import Path
 from tkinter import ttk, messagebox
 
 from . import command, model, paths
 from .model import Machine, Library
 from .paths import Settings
-from .profiles import PROFILES
-from .ui_dialogs import (NewMachineDialog, ask_name, confirm_delete, report_delete,
-                         confirm_clear_saved_settings, open_folder)
+from .profiles import PROFILES, profile_ids
+from .ui_dialogs import ask_name, confirm_delete, report_delete, open_folder
 from .ui_machine import MachineEditor
 
 APP_TITLE = "Qemu-system-ppc GUI"
 
+# The emulator's own output still goes into the machine's folder; the window
+# no longer shows any of it.
 LOG_NAME = "last-run.log"
-LOG_TAIL = 20
-
-COMMAND_EXPLAINER = ("This is exactly what will be run when you press Start. "
-                     "You do not have to understand it; it is here so that nothing is hidden.")
-NO_MACHINE_TEXT = ("No machine chosen yet.\n\n"
-                   "Press “New machine…” to set one up. A machine is one old Mac: "
-                   "its settings, its hard disk and its CD.")
 
 
 def qemu_dir() -> str:
@@ -71,13 +65,6 @@ class RunningMachine:
 
     def uptime(self) -> float:
         return time.time() - self.started
-
-    def log_tail(self, n: int = LOG_TAIL) -> list[str]:
-        try:
-            with open(self.log_path, "r", encoding="utf-8", errors="replace") as fh:
-                return [ln.rstrip("\n") for ln in deque(fh, maxlen=n)]
-        except OSError:
-            return []
 
 
 TERMINAL_STATUS = "Started in a Terminal window, which will ask for your password"
@@ -157,16 +144,16 @@ class MainWindow(tk.Tk):
         btns = ttk.Frame(left)
         btns.pack(fill="x", pady=(6, 0))
         spec = [("New machine…", self.new_machine),
-                ("Make a copy…", self.duplicate_machine),
-                ("Change this machine…", self.edit_machine),
+                ("Duplicate", self.duplicate_machine),
+                ("Edit", self.edit_machine),
                 ("Delete…", self.delete_machine),
-                ("Open its folder", self.open_folder),
-                ("Forget saved settings…", self.clear_saved_settings)]
+                ("Open machine folder", self.open_machine_folder)]
         for i, (label, cmd) in enumerate(spec):
             ttk.Button(btns, text=label, command=cmd).grid(
                 row=i // 2, column=i % 2, sticky="ew", padx=2, pady=2)
         self.start_button = ttk.Button(btns, text="Start this Mac", command=self.start_selected)
-        self.start_button.grid(row=len(spec) // 2, column=0, columnspan=2, sticky="ew", padx=2, pady=(8, 2))
+        self.start_button.grid(row=(len(spec) + 1) // 2, column=0, columnspan=2, sticky="ew",
+                               padx=2, pady=(8, 2))
         btns.columnconfigure(0, weight=1)
         btns.columnconfigure(1, weight=1)
 
@@ -177,24 +164,15 @@ class MainWindow(tk.Tk):
         self.status = ttk.Label(right, text="", foreground="gray", justify="left")
         self.status.pack(anchor="w", pady=(2, 6))
 
-        ttk.Label(right, text="My notes").pack(anchor="w")
-        self.notes = tk.Text(right, height=4, wrap="word")
+        ttk.Label(right, text="Command line constructed:").pack(anchor="w", pady=(8, 0))
+        self.command_line = tk.Text(right, height=14, wrap="none", font=self._mono(11))
+        self.command_line.pack(fill="both", expand=True)
+        self.command_line.config(state="disabled")
+
+        ttk.Label(right, text="My notes").pack(anchor="w", pady=(8, 0))
+        self.notes = tk.Text(right, height=6, wrap="word")
         self.notes.pack(fill="x")
         self.notes.config(state="disabled")
-
-        ttk.Label(right, text="What Start will run").pack(anchor="w", pady=(8, 0))
-        ttk.Label(right, text=COMMAND_EXPLAINER, foreground="gray", wraplength=620,
-                  justify="left").pack(anchor="w")
-        self.overview = tk.Text(right, height=14, wrap="none", font=self._mono(11))
-        self.overview.pack(fill="both", expand=True)
-        self.overview.config(state="disabled")
-
-        ttk.Label(right, text="Messages from the last time it ran").pack(anchor="w", pady=(8, 0))
-        ttk.Label(right, text="Technical, and only worth reading if something went wrong.",
-                  foreground="gray").pack(anchor="w")
-        self.log = tk.Text(right, height=6, wrap="none", font=self._mono(10))
-        self.log.pack(fill="x")
-        self.log.config(state="disabled")
 
         foot = ttk.Label(self, foreground="gray", justify="left",
                          text=f"Machines are kept in {paths.machines_dir()}\n"
@@ -249,15 +227,16 @@ class MainWindow(tk.Tk):
         if name:
             self.settings.last_machine = name
             self._save_settings()
-        self.refresh_overview()
+        self.refresh_details()
 
-    def refresh_overview(self):
+    def refresh_details(self):
+        """The right-hand side: how it ran, where it is kept, the command
+        line Start will run, and the notes."""
         m = self.selected_machine()
         if not m:
-            self._set_text(self.overview, NO_MACHINE_TEXT)
+            self._set_text(self.command_line, "")
             self.status.config(text="")
             self._set_text(self.notes, "")
-            self._set_text(self.log, "")
             self.run_status.config(text="")
             self.start_button.state(["disabled"])
             return
@@ -267,7 +246,7 @@ class MainWindow(tk.Tk):
             text = command.launcher_text(m, qemu_dir(), str(folder))
         except Exception as e:      # never let one bad record blank the window
             text = f"(this machine's settings could not be turned into a command: {e})"
-        self._set_text(self.overview, text)
+        self._set_text(self.command_line, text)
         saved = self.library.saved_settings_status(m.name)
         if any(v is not None for v in saved.values()):
             first = "The Mac has settings of its own saved from an earlier run."
@@ -286,7 +265,6 @@ class MainWindow(tk.Tk):
                 self.run_status.config(text=f"{TERMINAL_STATUS} (at {when}).")
             else:
                 self.run_status.config(text="Not running.")
-            self._set_text(self.log, "")
             return
         if r.exit_code is None:
             self.run_status.config(text=f"Running now — {self._duration(r.uptime())} so far.")
@@ -294,9 +272,8 @@ class MainWindow(tk.Tk):
             self.run_status.config(text=f"Stopped, after {self._duration(r.uptime())}.")
         else:
             self.run_status.config(
-                text=f"Stopped after {self._duration(r.uptime())}. Something went wrong — "
-                     f"the messages below may say what (code {r.exit_code}).")
-        self._set_text(self.log, "\n".join(r.log_tail()))
+                text=f"Stopped after {self._duration(r.uptime())}. Something went wrong "
+                     f"(code {r.exit_code}); {LOG_NAME} in the machine's folder says what.")
 
     @staticmethod
     def _duration(seconds: float) -> str:
@@ -309,23 +286,19 @@ class MainWindow(tk.Tk):
 
     # ---------------- actions
     def new_machine(self):
-        dlg = NewMachineDialog(self, self.library.names())
-        if not dlg.result:
-            return
-        name, profile_id = dlg.result
-        m = model.new_machine(name, profile_id)
-        self.library.save(m)
-        self._write_launcher(m)
-        self.refresh_list(select=name)
-        self.edit_machine()
+        """No separate dialogue: the settings window opens on the Machine
+        page with an empty Name and the System list, and the machine comes
+        into being when it is saved. Cancel, and nothing has been made."""
+        m = model.new_machine("", profile_ids()[0])
+        MachineEditor(self, m, self.library, qemu_dir(), self._on_editor_save, is_new=True)
 
     def duplicate_machine(self):
         name = self.selected_name()
         if not name:
             return
         new_name = ask_name(
-            self, "Make a copy",
-            "Name for the copy.\n\nThe copy starts out using the same hard disk and CD files "
+            self, "Duplicate",
+            "Name for the duplicate.\n\nThe copy starts out using the same hard disk and CD files "
             "as the original: nothing is copied and nothing is duplicated on your disk. Do "
             "not run both machines at the same time.",
             f"{name} copy", self.library.names())
@@ -334,7 +307,7 @@ class MainWindow(tk.Tk):
         try:
             m = self.library.duplicate(name, new_name)
         except (OSError, ValueError) as e:
-            messagebox.showerror("Make a copy", str(e))
+            messagebox.showerror("Duplicate", str(e))
             return
         self._write_launcher(m)
         self.refresh_list(select=new_name)
@@ -361,7 +334,7 @@ class MainWindow(tk.Tk):
         if not m:
             return
         if m.name in self.running and self.running[m.name].poll() is None:
-            messagebox.showinfo("Change this machine",
+            messagebox.showinfo("Edit",
                                 f"“{m.name}” is running. Anything you change now will "
                                 "apply the next time you start it, not straight away.")
         MachineEditor(self, m, self.library, qemu_dir(), self._on_editor_save)
@@ -382,23 +355,7 @@ class MainWindow(tk.Tk):
             messagebox.showerror(APP_TITLE, "The start-up file for this machine could not be "
                                              f"written.\n\n{e}")
 
-    def clear_saved_settings(self):
-        name = self.selected_name()
-        if not name:
-            return
-        if name in self.running and self.running[name].poll() is None:
-            messagebox.showwarning("Forget saved settings",
-                                   f"“{name}” is running. Shut the Mac down first.")
-            return
-        if confirm_clear_saved_settings(self, name, self.library.saved_settings_status(name)):
-            self.library.clear_saved_settings(name)
-            self.refresh_overview()
-            messagebox.showinfo("Forget saved settings",
-                                f"Done. “{name}” has forgotten its startup disk, date "
-                                "and screen settings, and will work them out again the next "
-                                "time you start it.\n\nNo disks were touched.")
-
-    def open_folder(self):
+    def open_machine_folder(self):
         name = self.selected_name()
         if name:
             open_folder(self.library.folder(name))
@@ -424,7 +381,7 @@ class MainWindow(tk.Tk):
         if errors:
             messagebox.showerror("Start", "This machine cannot start yet:\n\n" +
                                  "\n".join(f"• {e}" for e in errors) +
-                                 "\n\nPress “Change this machine…” to put it right.")
+                                 "\n\nPress “Edit” to put it right.")
             return None
         if command.needs_sudo(m):
             if paths.HOST_PLATFORM != "darwin":

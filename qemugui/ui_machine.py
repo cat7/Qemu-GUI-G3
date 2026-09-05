@@ -212,16 +212,24 @@ class DriveRow:
 
 
 class MachineEditor(tk.Toplevel):
-    """Change one machine. ``on_save(machine, old_name)`` runs after checking."""
+    """One machine's settings. ``on_save(machine, old_name)`` runs after
+    checking.
 
-    def __init__(self, parent, machine: Machine, library: model.Library, qemu_dir: str, on_save):
+    A brand new machine opens the same window with ``is_new``: Name is empty,
+    System is the first of the five, and nothing exists on disk until Save.
+    There is no separate New-machine dialogue any more.
+    """
+
+    def __init__(self, parent, machine: Machine, library: model.Library, qemu_dir: str, on_save,
+                 is_new: bool = False):
         super().__init__(parent)
         self.machine = machine.copy()
         self.old_name = machine.name
+        self.is_new = is_new
         self.library = library
         self.qemu_dir = qemu_dir
         self.on_save = on_save
-        self.title(f"{machine.name} — settings")
+        self.title("New machine" if is_new else f"{machine.name} — settings")
         self.resizable(True, True)
         self.transient(parent)
 
@@ -242,6 +250,8 @@ class MachineEditor(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.load(self.machine)
         self._size_window()
+        self.nb.select(0)                       # the Machine page, always first
+        self.name_entry.focus_set()
 
     def _size_window(self):
         """Two thirds of the width the window used to ask for, and no taller
@@ -252,7 +262,10 @@ class MachineEditor(tk.Toplevel):
         self.minsize(640, 400)
 
     def machine_folder(self) -> Path:
-        return self.library.folder(self.name_var.get().strip() or self.old_name)
+        """Where this machine's own files live. It is named after the
+        machine, so an unnamed one has no folder yet."""
+        name = self.name_var.get().strip() or self.old_name
+        return self.library.folder(name) if name else self.library.root
 
     # ---------------- tabs
     def _tab(self, title: str) -> ttk.Frame:
@@ -273,7 +286,8 @@ class MachineEditor(tk.Toplevel):
         r = 0
         ttk.Label(f, text="Name:").grid(row=r, column=0, sticky="w", pady=4)
         self.name_var = tk.StringVar()
-        ttk.Entry(f, textvariable=self.name_var, width=40).grid(row=r, column=1, sticky="ew", pady=4)
+        self.name_entry = ttk.Entry(f, textvariable=self.name_var, width=40)
+        self.name_entry.grid(row=r, column=1, sticky="ew", pady=4)
         r += 1
         ttk.Label(f, text="System:").grid(row=r, column=0, sticky="w", pady=4)
         self.profile_var = tk.StringVar()
@@ -631,6 +645,12 @@ class MachineEditor(tk.Toplevel):
 
     # ---------------- actions
     def _create_disk(self):
+        if not self.name_var.get().strip():
+            messagebox.showinfo("New hard disk",
+                                "Give this machine a name on the Machine page first: the "
+                                "disk is made in the machine's own folder, and the folder "
+                                "is named after the machine.", parent=self)
+            return
         cur = self.collect()
         dlg = CreateDiskDialog(self, cur, self.machine_folder())
         if not dlg.result:
@@ -645,7 +665,7 @@ class MachineEditor(tk.Toplevel):
     def save(self):
         m = self.collect()
         errors, warnings = model.validate(m, self.qemu_dir,
-                                          machine_dir=str(self.library.folder(m.name or self.old_name)))
+                                          machine_dir=str(self.machine_folder()))
         if m.name != self.old_name and self.library.exists(m.name):
             errors.append(f"You already have a machine called “{m.name}”.")
         self.msg.config(text="  ".join(errors + warnings)[:300])

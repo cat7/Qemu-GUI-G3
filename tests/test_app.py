@@ -255,6 +255,61 @@ class TheEditorFillsNothingIn(unittest.TestCase):
                 self.assertNotIn(".rom", str(value).lower(), f"{p.id}: {value}")
 
 
+class TheWindowSaysWhatTheUserAskedItToSay(unittest.TestCase):
+    """The interface list of 2026-09-05, checked at source level: these tests
+    run headless, so they read the two interface modules rather than build a
+    window. They exist so a later change cannot quietly bring back a wording
+    or a control the user asked to be rid of."""
+
+    def setUp(self):
+        self.main = (ROOT / "qemugui" / "ui_main.py").read_text()
+        self.editor = (ROOT / "qemugui" / "ui_machine.py").read_text()
+        self.dialogs = (ROOT / "qemugui" / "ui_dialogs.py").read_text()
+
+    def test_the_command_line_is_labelled_and_unexplained(self):
+        self.assertIn("Command line constructed:", self.main)
+        self.assertNotIn("What Start will run", self.main)
+        self.assertNotIn("This is exactly", self.main)
+
+    def test_no_paragraph_where_a_machine_has_not_been_chosen(self):
+        self.assertNotIn("No machine chosen yet", self.main)
+
+    def test_the_last_run_messages_section_is_gone_from_the_window(self):
+        for gone in ("Messages from the last time", "log_tail", "self.log = tk.Text",
+                     "only worth reading if something went wrong"):
+            self.assertNotIn(gone, self.main, gone)
+        # the launcher still keeps the emulator's output in the machine folder
+        self.assertIn('LOG_NAME = "last-run.log"', self.main)
+        self.assertIn("stdout=log_fh", self.main)
+
+    def test_the_buttons_are_named_the_way_the_user_named_them(self):
+        for wanted in ('"Duplicate"', '"Edit"', '"Open machine folder"'):
+            self.assertIn(wanted, self.main, wanted)
+        for gone in ("Make a copy", "Change this machine", "Open its folder",
+                     "Forget saved settings", "clear_saved_settings"):
+            self.assertNotIn(gone, self.main, gone)
+
+    def test_there_is_no_new_machine_dialogue_left(self):
+        for src in (self.main, self.editor, self.dialogs):
+            self.assertNotIn("NewMachineDialog", src)
+        for gone in ("What would you like to call it", "Which system are you going to run",
+                     "This only sets the memory and the graphics card"):
+            self.assertNotIn(gone, self.dialogs, gone)
+        # it opens the settings window itself, on the Machine page
+        self.assertIn("is_new=True", self.main)
+        self.assertIn("self.nb.select(0)", self.editor)
+        # and the Machine page keeps its plain labels, without the explanations
+        self.assertIn('text="Name:"', self.editor)
+        self.assertIn('text="System:"', self.editor)
+
+    def test_a_file_field_can_be_typed_into(self):
+        picker = self.editor[self.editor.index("class FilePicker:"):
+                             self.editor.index("class DriveRow:")]
+        self.assertNotIn("readonly", picker)            # it was a read-only field
+        self.assertIn("Type or paste a path", picker)
+        self.assertIn("<Double-Button-1>", picker)      # browsing is still there
+
+
 class DeleteNeverTouchesADiskImage(unittest.TestCase):
     """A disk image can be hours of installing an operating system. Deleting
     a machine removes the record, the launcher and the saved settings, and
