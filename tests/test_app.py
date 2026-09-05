@@ -558,3 +558,26 @@ class NoOtherPathCanRemoveAFile(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheSecondScreenIsOptional(unittest.TestCase):
+    """The extra card and its ROM are optional, so neither may be complained
+    about, and the only card offered is the Rage 128 (user, 2026-09-05)."""
+
+    def test_no_card_and_no_card_rom_are_both_silent(self):
+        m = model.new_machine("t", "macos_8_to_9")
+        m.rom = "rom.bin"
+        errors, warnings = model.validate(m, "darwin", check_files=False)
+        self.assertFalse([w for w in warnings if "card" in w.lower()], warnings)
+        m.second_gpu = model.SecondGpu("ati-rage128-pro", "0x0e", None)
+        errors, warnings = model.validate(m, "darwin", check_files=False)
+        self.assertFalse([w for w in warnings if "card" in w.lower()], warnings)
+        self.assertFalse([e for e in errors if "card" in e.lower()], errors)
+
+    def test_the_display_tab_offers_no_card_chooser(self):
+        src = (Path(__file__).resolve().parent.parent / "qemugui" / "ui_machine.py").read_text()
+        for gone in ("GPU_CHOICES", "GPU_SEPARATOR", "Card:", "Extra graphics card"):
+            self.assertNotIn(gone, src)
+        for kept in ("Enable dual screen", "Ati Rage 128 ROM:",
+                     "Built-in ATI Mach64 GT", "Use built-in ROM", "Select ROM"):
+            self.assertIn(kept, src)

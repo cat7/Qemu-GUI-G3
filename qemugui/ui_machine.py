@@ -21,10 +21,6 @@ from .ui_dialogs import show_validation, CreateDiskDialog
 
 KIND_LABELS = {"": "Empty", "disk": "Hard disk", "cdrom": "CD"}
 KIND_BY_LABEL = {v: k for k, v in KIND_LABELS.items()}
-GPU_NONE = "None"
-GPU_RAGE = "ATI Rage 128 Pro"
-GPU_SEPARATOR = "────────"
-GPU_CHOICES = [GPU_NONE, GPU_RAGE, GPU_SEPARATOR, *model.SECOND_GPU_EXPERIMENTAL]
 IMAGE_TYPES = [("Hard disks and CDs", "*.img *.dsk *.qcow2 *.iso *.toast *.cdr"),
                ("Every file", "*")]
 ROM_TYPES = [("ROM files", "*.rom *.ROM *.bin"), ("Every file", "*")]
@@ -251,13 +247,13 @@ class MachineEditor(tk.Toplevel):
     def _build_display(self):
         f = self._tab("Display")
         f.columnconfigure(1, weight=1)
-        ttk.Label(f, text="Built-in graphics", font=("", 0, "bold")).grid(
+        ttk.Label(f, text="Built-in ATI Mach64 GT", font=("", 0, "bold")).grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.onboard_mode = tk.StringVar(value="none")
-        ttk.Radiobutton(f, text="Use the Mac's own ROM",
+        ttk.Radiobutton(f, text="Use built-in ROM",
                         variable=self.onboard_mode, value="none").grid(
             row=1, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text="Use this file:", variable=self.onboard_mode,
+        ttk.Radiobutton(f, text="Select ROM", variable=self.onboard_mode,
                         value="file").grid(row=2, column=0, sticky="w")
         self.onboard_rom_var = tk.StringVar()
         FilePicker(f, self.onboard_rom_var, ROM_TYPES, width=40,
@@ -265,33 +261,23 @@ class MachineEditor(tk.Toplevel):
                                                         sticky="ew", padx=2)
 
         ttk.Separator(f).grid(row=3, column=0, columnspan=3, sticky="ew", pady=10)
-        ttk.Label(f, text="Extra graphics card",
-                  font=("", 0, "bold")).grid(row=4, column=0, columnspan=3, sticky="w",
-                                             pady=(0, 4))
-        ttk.Label(f, text="Card:").grid(row=5, column=0, sticky="w")
-        self.gpu_var = tk.StringVar(value=GPU_NONE)
-        self._gpu_prev = GPU_NONE
-        cb = ttk.Combobox(f, textvariable=self.gpu_var, values=GPU_CHOICES, state="readonly",
-                          width=38)
-        cb.grid(row=5, column=1, sticky="w")
-        cb.bind("<<ComboboxSelected>>", self._gpu_changed)
-        ttk.Label(f, text="Card ROM:").grid(row=6, column=0, sticky="w", pady=(6, 0))
+        self.gpu_on = tk.BooleanVar(value=False)
+        ttk.Checkbutton(f, text="Enable dual screen", variable=self.gpu_on,
+                        command=self._gpu_changed).grid(
+            row=4, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        ttk.Label(f, text="Ati Rage 128 ROM:").grid(row=5, column=0, sticky="w", pady=(6, 0))
         self.gpu_rom_var = tk.StringVar()
         FilePicker(f, self.gpu_rom_var, ROM_TYPES, width=40,
-                   fallback=lambda: self.qemu_dir).grid(row=6, column=1, columnspan=2,
+                   fallback=lambda: self.qemu_dir).grid(row=5, column=1, columnspan=2,
                                                         sticky="ew", padx=2, pady=(6, 0))
-        ttk.Label(f, text="Slot:").grid(row=7, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(f, text="Slot:").grid(row=6, column=0, sticky="w", pady=(6, 0))
         self.gpu_addr_var = tk.StringVar(value=SecondGpu().addr)
         ttk.Entry(f, textvariable=self.gpu_addr_var, width=8).grid(
-            row=7, column=1, sticky="w", pady=(6, 0))
+            row=6, column=1, sticky="w", pady=(6, 0))
 
     def _gpu_changed(self, _e=None):
-        """Choosing a card never chooses its ROM file."""
-        if self.gpu_var.get() == GPU_SEPARATOR:
-            self.gpu_var.set(self._gpu_prev)
-            return
-        self._gpu_prev = self.gpu_var.get()
-        if self.gpu_var.get() != GPU_NONE and not self.gpu_addr_var.get():
+        """Enabling the card never chooses its ROM file."""
+        if self.gpu_on.get() and not self.gpu_addr_var.get():
             self.gpu_addr_var.set(SecondGpu().addr)
 
     def _build_drives(self):
@@ -418,16 +404,13 @@ class MachineEditor(tk.Toplevel):
         self.onboard_mode.set("file" if m.onboard_romfile else "none")
         self.onboard_rom_var.set(m.onboard_romfile or "")
         if m.second_gpu:
-            dev = m.second_gpu.device
-            self.gpu_var.set(GPU_RAGE if dev == "ati-rage128-pro"
-                             else dev if dev in GPU_CHOICES else GPU_NONE)
+            self.gpu_on.set(True)
             self.gpu_addr_var.set(m.second_gpu.addr or "")
             self.gpu_rom_var.set(m.second_gpu.romfile or "")
         else:
-            self.gpu_var.set(GPU_NONE)
+            self.gpu_on.set(False)
             self.gpu_addr_var.set(SecondGpu().addr)
             self.gpu_rom_var.set("")
-        self._gpu_prev = self.gpu_var.get()
         for i, row in enumerate(self.ata_rows):
             row.set_ata(m.ata[i] if i < len(m.ata) else None)
         for sid, row in enumerate(self.scsi_rows):
@@ -457,30 +440,12 @@ class MachineEditor(tk.Toplevel):
         m.notes = self.notes.get("1.0", "end").rstrip("\n")
         m.onboard_romfile = (self.onboard_rom_var.get().strip() or None
                              if self.onboard_mode.get() == "file" else None)
-        g = self.gpu_var.get()
-        if g in (GPU_NONE, GPU_SEPARATOR):
+        if not self.gpu_on.get():
             m.second_gpu = None
         else:
-            dev = "ati-rage128-pro" if g == GPU_RAGE else g
-            m.second_gpu = SecondGpu(dev, self.gpu_addr_var.get().strip(),
+            m.second_gpu = SecondGpu("ati-rage128-pro",
+                                     self.gpu_addr_var.get().strip(),
                                      self.gpu_rom_var.get().strip() or None)
-        m.ata = [row.get_ata() for row in self.ata_rows]
-        m.scsi = [d for d in (row.get_scsi(sid) for sid, row in enumerate(self.scsi_rows)) if d]
-        if self.floppy_mode.get() == "file" and self.floppy_var.get().strip():
-            m.floppy = Floppy(self.floppy_var.get().strip(), "raw")
-        else:
-            m.floppy = None
-        mode = self.net_mode.get()
-        ifname = self.ifname_var.get().strip() if mode in model.NETWORK_MODES_WITH_IFNAME else ""
-        m.network = Network(mode, self.mac_var.get().strip(), ifname)
-        try:
-            mips = int(self.mips_var.get())
-        except ValueError:
-            mips = 0
-        m.governor = Governor(self.gov_mode.get(), mips)
-        m.audio = self.audio_var.get()
-        m.extra_args = self.extra_var.get().strip()
-        return m
 
     # ---------------- actions
     def _create_disk(self):

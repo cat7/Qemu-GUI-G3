@@ -445,10 +445,7 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
     if m.second_gpu:
         if m.second_gpu.addr and not ADDR_RE.match(m.second_gpu.addr):
             errors.append("The card slot has to look like 0x0e.")
-        if m.second_gpu.device in SECOND_GPU_EXPERIMENTAL:
-            warnings.append("That graphics card is untested.")
-        if m.second_gpu.device == "ati-rage128-pro" and not m.second_gpu.romfile:
-            warnings.append("The extra graphics card has no ROM.")
+
 
     seen_ids = set()
     for s in m.scsi:
