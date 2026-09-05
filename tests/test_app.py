@@ -694,3 +694,14 @@ class TheCreateDiskButton(unittest.TestCase):
         state, labels = self._editor_state(with_qemu_img=True)
         self.assertEqual(state, "normal")
         self.assertFalse(any("not found" in l for l in labels), labels)
+
+
+class TheSecondScreenIsOptIn(unittest.TestCase):
+    """Nothing fits the extra card for you: a new machine has none, whichever
+    system is chosen (user, 2026-09-05)."""
+
+    def test_no_system_fits_the_card(self):
+        from qemugui import systems
+        for sysid in [s.id for s in systems.SYSTEMS.values()]:
+            m = model.new_machine("t", sysid)
+            self.assertIsNone(m.second_gpu, sysid)

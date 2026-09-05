@@ -19,18 +19,17 @@ class System:
     id: str
     label: str
     ram_mb: int
-    second_gpu: bool                # seed an ATI Rage 128 Pro in slot 0x0e
 
 
 # The five systems the System list offers, in the order it offers them. Each
 # id is its own label written plainly, so a saved record or a fixture says
 # which system it means without a lookup table.
 SYSTEMS: dict[str, System] = {
-    "macos_8_to_9": System("macos_8_to_9", "Mac OS 8 to 9", 512, True),
-    "macosx_10_0_to_10_2": System("macosx_10_0_to_10_2", "Mac OS X 10.0 to 10.2", 512, True),
-    "osx_server_1_2v3": System("osx_server_1_2v3", "OSX Server 1.2v3", 1024, False),
-    "linux": System("linux", "Linux", 256, False),
-    "other": System("other", "Other", 512, False),
+    "macos_8_to_9": System("macos_8_to_9", "Mac OS 8 to 9", 512),
+    "macosx_10_0_to_10_2": System("macosx_10_0_to_10_2", "Mac OS X 10.0 to 10.2", 512),
+    "osx_server_1_2v3": System("osx_server_1_2v3", "OSX Server 1.2v3", 1024),
+    "linux": System("linux", "Linux", 256),
+    "other": System("other", "Other", 512),
 }
 
 DEFAULT_SECOND_GPU_ADDR = "0x0e"

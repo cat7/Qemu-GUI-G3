@@ -481,7 +481,7 @@ class LibraryOps(unittest.TestCase):
             lib = model.Library(td)
             m = model.new_machine("Mac OS 9", "macos_8_to_9")
             self.assertEqual(m.ram_mb, 512)
-            self.assertIsNotNone(m.second_gpu)
+            self.assertIsNone(m.second_gpu)       # the second screen is opt-in
             self.assertIsNone(m.onboard_romfile)  # no file is ever chosen for you
             self.assertEqual([d.kind if d else None for d in m.ata], [None, None, None, None])
             lib.save(m)

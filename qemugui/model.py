@@ -392,8 +392,6 @@ def new_machine(name: str, system_id: str) -> Machine:
     start empty. The install folder is never searched for likely files."""
     p = SYSTEMS[normalise_system_id(system_id)]
     m = Machine(name=name, system=p.id, ram_mb=p.ram_mb, display=default_display())
-    if p.second_gpu:
-        m.second_gpu = SecondGpu()
     m.ata = [None, None, None, None]
     return m
 
