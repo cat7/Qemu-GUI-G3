@@ -5,17 +5,29 @@
   "machine": "g3beige",
   "ram_mb": 1024,
   "rom": "PowerMacG3v3.ROM",
-  "qemu_dir": "/Applications/qemu-system-ppc-g3-server12v3",
   "display": "cocoa",
   "audio": "default",
   "onboard_romfile": "ati_mach_gt.rom",
   "second_gpu": null,
-  "network": {"mode": "user", "mac": "00:05:02:12:34:56"},
-  "governor": {"mode": "default"},
+  "network": {
+    "mode": "user",
+    "mac": "00:05:02:12:34:56"
+  },
+  "governor": {
+    "mode": "default"
+  },
   "ata": [
-    {"kind": "disk", "file": "/Volumes/Macdata/qemu/hd/Server1.2v3.img", "format": "raw"},
+    {
+      "kind": "disk",
+      "file": "/Volumes/Macdata/qemu/hd/Server1.2v3.img",
+      "format": "raw"
+    },
     null,
-    {"kind": "cdrom", "file": "/Volumes/Macdata/qemu/iso/Server_1.2v3.iso", "format": "raw"},
+    {
+      "kind": "cdrom",
+      "file": "/Volumes/Macdata/qemu/iso/Server_1.2v3.iso",
+      "format": "raw"
+    },
     null
   ],
   "scsi": [],

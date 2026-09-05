@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Open the real GUI (MainWindow + mainloop) on a library and capture the main
-window and the editor's ATA tab with `screencapture -x -R` after a 3 s delay.
+"""Open the real GUI (MainWindow + mainloop) on a scratch install and capture
+the main window and the editor's Drives tab with `screencapture -x -R`.
 
-    python tools/screenshots.py <settings.json> <out-dir>
+    python tools/screenshots.py <install-dir> <out-dir>
 """
 import subprocess, sys
 from pathlib import Path
@@ -12,9 +12,10 @@ from qemugui import paths
 from qemugui.ui_main import MainWindow
 from qemugui.ui_machine import MachineEditor
 
-settings_file = Path(sys.argv[1]); out = Path(sys.argv[2]); out.mkdir(parents=True, exist_ok=True)
-settings = paths.Settings.load(settings_file)
-app = MainWindow(settings, settings_file)
+paths.use_install_dir(Path(sys.argv[1]))
+out = Path(sys.argv[2]); out.mkdir(parents=True, exist_ok=True)
+settings_file = paths.settings_path()
+app = MainWindow(paths.Settings.load(settings_file), settings_file)
 
 def region(w):
     w.update_idletasks()
@@ -30,13 +31,13 @@ def step1():
     capture(app, "screenshot-main.png")
     app.attributes("-topmost", False)
     m = app.selected_machine()
-    ed = MachineEditor(app, m, app.library, settings.qemu_dir, lambda *a: None)
-    ed.nb.select(2)  # ATA tab
+    ed = MachineEditor(app, m, app.library, str(paths.install_dir()), lambda *a: None)
+    ed.nb.select(2)  # Drives tab
     ed.lift(); ed.attributes("-topmost", True)
     app.after(3000, lambda: step2(ed))
 
 def step2(ed):
-    capture(ed, "screenshot-ata-tab.png")
+    capture(ed, "screenshot-drives-tab.png")
     ed.destroy()
     app.after(500, app.destroy)
 

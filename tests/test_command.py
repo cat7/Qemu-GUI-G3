@@ -21,6 +21,18 @@ from qemugui.model import Machine, AtaDrive, ScsiDrive, Identity, Floppy, Second
 
 FIXTURES = HERE / "fixtures"
 
+# The folder each fixture's launcher was written for. Qemu-GUI now always
+# uses the folder it is installed in, so this is no longer part of the
+# record: the tests pass it in the way the application does.
+FIXTURE_QEMU_DIR = {
+    "mac-os.json": "/Applications/qemu-system-ppc-g3-mac-os",
+    "mac-os-vmnet-bridged.json": "/Applications/qemu-system-ppc-g3-mac-os",
+    "server12v3.json": "/Applications/qemu-system-ppc-g3-server12v3",
+    "linux.json": "/Applications/qemu-system-ppc-g3-linux",
+    "scsi-windows.json": r"C:\qemu-g3",
+    "tap-windows.json": r"C:\qemu-g3",
+}
+
 # The user's launchers, verbatim from doc/HANDOFF-qemu-gui.md ("Ground truth").
 USER_MAC_OS = r"""
 ./qemu-system-ppc \
@@ -84,34 +96,35 @@ def load_fixture(name: str) -> Machine:
     return Machine.load(FIXTURES / name)
 
 
-def gen_tokens(m: Machine, platform: str = "darwin") -> set[str]:
-    argv = command.build_argv(m, "/nonexistent-global-qemu-dir", str(FIXTURES), platform)
+def gen_tokens(m: Machine, qemu_dir: str, platform: str = "darwin") -> set[str]:
+    argv = command.build_argv(m, qemu_dir, str(FIXTURES), platform)
     return set(argv[1:])
 
 
 class UserLaunchers(unittest.TestCase):
     """The primary correctness test: the three deployed launchers."""
 
+    def check(self, fixture: str, text: str):
+        qd = FIXTURE_QEMU_DIR[fixture]
+        self.assertEqual(gen_tokens(load_fixture(fixture), qd), user_tokens(text, qd))
+
     def test_mac_os(self):
-        m = load_fixture("mac-os.json")
-        self.assertEqual(gen_tokens(m), user_tokens(USER_MAC_OS, m.qemu_dir))
+        self.check("mac-os.json", USER_MAC_OS)
 
     def test_server12v3(self):
-        m = load_fixture("server12v3.json")
-        self.assertEqual(gen_tokens(m), user_tokens(USER_SERVER, m.qemu_dir))
+        self.check("server12v3.json", USER_SERVER)
 
     def test_linux(self):
-        m = load_fixture("linux.json")
-        self.assertEqual(gen_tokens(m), user_tokens(USER_LINUX, m.qemu_dir))
+        self.check("linux.json", USER_LINUX)
 
     def test_binary_is_absolute_and_first(self):
         m = load_fixture("mac-os.json")
-        argv = command.build_argv(m, "", str(FIXTURES), "darwin")
+        argv = command.build_argv(m, "/Applications/qemu-system-ppc-g3-mac-os", str(FIXTURES), "darwin")
         self.assertEqual(argv[0], "/Applications/qemu-system-ppc-g3-mac-os/qemu-system-ppc")
 
     def test_shell_rendering_shape(self):
         m = load_fixture("mac-os.json")
-        text = command.launcher_text(m, "", str(FIXTURES), "darwin")
+        text = command.launcher_text(m, "/q", str(FIXTURES), "darwin")
         lines = text.splitlines()
         self.assertEqual(lines[0], "#!/bin/bash")
         self.assertIn('cd "$(dirname "$0")"', lines)
@@ -128,7 +141,7 @@ class WindowsRendering(unittest.TestCase):
 
     def test_bat_scsi_identity(self):
         m = load_fixture("scsi-windows.json")
-        argv = command.build_argv(m, "", r"C:\Machines\SCSI", "win32")
+        argv = command.build_argv(m, r"C:\qemu-g3", r"C:\Machines\SCSI", "win32")
         text = command.render_bat(argv)
         self.assertEqual(argv[0], r"C:\qemu-g3\qemu-system-ppc.exe")
         self.assertIn('cd /d "%~dp0"', text)
@@ -149,7 +162,7 @@ class WindowsRendering(unittest.TestCase):
 
     def test_posix_scsi_identity_token_is_whole(self):
         m = load_fixture("scsi-windows.json")
-        argv = command.build_argv(m, "", "/tmp/m", "darwin")
+        argv = command.build_argv(m, "/q", "/tmp/m", "darwin")
         tok = [t for t in argv if t.startswith("scsi-hd,")][0]
         self.assertEqual(tok, "scsi-hd,drive=shd0,scsi-id=0,vendor=QUANTUM,product=FIREBALL ST4.3S,ver=0F0C")
         text = command.render_shell(argv)
@@ -165,9 +178,7 @@ class WindowsRendering(unittest.TestCase):
 class Options(unittest.TestCase):
 
     def base(self) -> Machine:
-        m = load_fixture("mac-os.json")
-        m.qemu_dir = "/q"
-        return m
+        return load_fixture("mac-os.json")
 
     def test_floppy(self):
         m = self.base()
@@ -182,7 +193,7 @@ class Options(unittest.TestCase):
     def test_second_gpu_none(self):
         m = self.base()
         m.second_gpu = None
-        argv = command.build_argv(m, "", "/m", "darwin")
+        argv = command.build_argv(m, "/q", "/m", "darwin")
         self.assertFalse(any("ati-rage128-pro" in t for t in argv))
         # onboard card still there
         self.assertIn("ati-mach64-gt.romfile=/q/ati_mach_gt.rom", argv)
@@ -250,11 +261,20 @@ class Options(unittest.TestCase):
         self.assertEqual(argv[-4:], ["-qmp", "unix:/tmp/g92live.sock,server=on,wait=off",
                                      "-global", "ati-mach64-gt.host-cursor-tracking=off"])
 
-    def test_global_qemu_dir_used_when_no_override(self):
+    def test_binary_comes_from_the_folder_the_app_is_in(self):
+        """There is no per-machine override any more: whatever folder the
+        application is installed in is the folder the emulator comes from."""
         m = self.base()
-        m.qemu_dir = None
+        self.assertFalse(hasattr(m, "qemu_dir"))
+        self.assertNotIn("qemu_dir", json.loads(m.to_json()))
         argv = command.build_argv(m, "/Applications/qemu-system-ppc-g3-mac-os", "/m", "darwin")
         self.assertEqual(argv[0], "/Applications/qemu-system-ppc-g3-mac-os/qemu-system-ppc")
+        argv = command.build_argv(m, "/somewhere/else", "/m", "darwin")
+        self.assertEqual(argv[0], "/somewhere/else/qemu-system-ppc")
+
+    def test_old_record_with_a_qemu_dir_key_loads_and_drops_it(self):
+        m = Machine.from_dict({"name": "old", "qemu_dir": "/Applications/whatever"})
+        self.assertNotIn("qemu_dir", json.loads(m.to_json()))
 
 
 class Networking(unittest.TestCase):
@@ -263,7 +283,7 @@ class Networking(unittest.TestCase):
     def nic(self, mode, ifname="", platform="darwin"):
         m = load_fixture("mac-os.json")
         m.network = Network(mode, "00:05:02:12:34:56", ifname)
-        argv = command.build_argv(m, "", "/m", platform)
+        argv = command.build_argv(m, "/q", "/m", platform)
         return argv[argv.index("-nic") + 1]
 
     def test_none(self):
@@ -288,7 +308,7 @@ class Networking(unittest.TestCase):
 
     def test_vmnet_command_has_sudo_prefix_and_chown_tail(self):
         m = load_fixture("mac-os-vmnet-bridged.json")
-        text = command.launcher_text(m, "", "/m", "darwin")
+        text = command.launcher_text(m, "/Applications/qemu-system-ppc-g3-mac-os", "/m", "darwin")
         lines = text.splitlines()
         self.assertIn("sudo /Applications/qemu-system-ppc-g3-mac-os/qemu-system-ppc \\", lines)
         self.assertIn("-nic vmnet-bridged,ifname=en0,model=bmac,mac=00:05:02:12:34:56 \\", lines)
@@ -303,25 +323,25 @@ class Networking(unittest.TestCase):
         self.assertLess(lines.index("sudo -v"),
                         [i for i, ln in enumerate(lines) if ln.startswith("sudo /")][0])
         # the argv used by Popen never contains sudo
-        argv = command.build_argv(m, "", "/m", "darwin")
+        argv = command.build_argv(m, "/Applications/qemu-system-ppc-g3-mac-os", "/m", "darwin")
         self.assertNotIn("sudo", argv[0])
         self.assertTrue(command.needs_sudo(m, "darwin"))
         self.assertFalse(command.needs_sudo(m, "win32"))
 
     def test_user_mode_command_has_no_sudo(self):
         m = load_fixture("mac-os.json")
-        text = command.launcher_text(m, "", "/m", "darwin")
+        text = command.launcher_text(m, "/q", "/m", "darwin")
         self.assertNotIn("sudo", text)
         self.assertNotIn("chown", text)
 
     def test_bat_never_has_sudo_or_chown(self):
         for f in ("tap-windows.json", "mac-os-vmnet-bridged.json"):
             m = load_fixture(f)
-            text = command.launcher_text(m, "", r"C:\m", "win32")
+            text = command.launcher_text(m, r"C:\q", r"C:\m", "win32")
             self.assertNotIn("sudo", text, f)
             self.assertNotIn("chown", text, f)
         m = load_fixture("tap-windows.json")
-        text = command.launcher_text(m, "", r"C:\m", "win32")
+        text = command.launcher_text(m, r"C:\q", r"C:\m", "win32")
         self.assertIn('-nic "tap,ifname=TAP-Windows Adapter V9,model=bmac,mac=00:05:02:12:34:56"', text)
 
     def test_cross_platform_load_save_round_trip(self):
@@ -336,13 +356,13 @@ class Networking(unittest.TestCase):
                       command.build_argv(m, "", "/m", "darwin"))
         errors, warnings = model.validate(m, None, "darwin", check_files=False)
         self.assertEqual(errors, [])
-        self.assertTrue(any("is for Windows" in w for w in warnings))
+        self.assertTrue(any("only works on Windows" in w for w in warnings))
         # and a macOS vmnet record on Windows
         v = load_fixture("mac-os-vmnet-bridged.json")
         self.assertEqual(Machine.from_json(v.to_json()), v)
         errors, warnings = model.validate(v, None, "win32", check_files=False)
         self.assertEqual(errors, [])
-        self.assertTrue(any("is for macOS" in w for w in warnings))
+        self.assertTrue(any("only works on a Mac" in w for w in warnings))
         # user/none records carry no ifname key
         self.assertNotIn("ifname", json.loads(load_fixture("mac-os.json").to_json())["network"])
 
@@ -357,7 +377,7 @@ class Networking(unittest.TestCase):
         m = load_fixture("mac-os.json")
         m.network = Network("vmnet-bridged", "00:05:02:12:34:56", "")
         errors, _ = model.validate(m, None, "darwin", check_files=False)
-        self.assertTrue(any("interface name" in e for e in errors))
+        self.assertTrue(any("network connections" in e for e in errors))
 
 
 class JsonRoundTrip(unittest.TestCase):
@@ -371,7 +391,7 @@ class JsonRoundTrip(unittest.TestCase):
 
     def test_full_record_round_trip(self):
         m = Machine(name="Every field", profile="macosx", ram_mb=768, rom="/abs/rom.ROM",
-                    qemu_dir="/q", display="cocoa", audio="none",
+                    display="cocoa", audio="none",
                     onboard_romfile="ati_mach_gt.rom",
                     second_gpu=SecondGpu("ati-rage128-pro", "0x0f", "card.rom"),
                     network=Network("user", "00:11:22:33:44:55"),
@@ -397,22 +417,23 @@ class Validation(unittest.TestCase):
         m.ata[3] = AtaDrive("cdrom", "/x.iso")
         errors, warnings = model.validate(m, None, "darwin", check_files=False)
         self.assertEqual(errors, [])
-        self.assertTrue(any("index 2 is empty" in w for w in warnings))
+        self.assertTrue(any("Move the CD to Drive 3" in w for w in warnings))
+        self.assertTrue(any("Your CD is not in Drive 3" in w for w in warnings))
 
     def test_duplicate_scsi_id_is_error(self):
         m = load_fixture("mac-os.json")
         m.scsi.append(ScsiDrive(3, "disk", "/y.img"))
         errors, _ = model.validate(m, None, "darwin", check_files=False)
-        self.assertTrue(any("SCSI drives use id 3" in e for e in errors))
+        self.assertTrue(any("both set to device 3" in e for e in errors))
 
     def test_scsi_id_7_is_the_computer(self):
         m = load_fixture("mac-os.json")
         m.scsi.append(ScsiDrive(7, "disk", "/y.img"))
         errors, _ = model.validate(m, None, "darwin", check_files=False)
-        self.assertTrue(any("SCSI id 7 is the computer" in e for e in errors))
+        self.assertTrue(any("device 7 is the Mac itself" in e for e in errors))
         loaded = Machine.from_dict({"name": "x", "scsi": [{"id": 7, "kind": "disk", "file": "/y.img"}]})
         errors, _ = model.validate(loaded, None, "darwin", check_files=False)
-        self.assertTrue(any("SCSI id 7 is the computer" in e for e in errors))
+        self.assertTrue(any("device 7 is the Mac itself" in e for e in errors))
 
     def test_bad_name_and_ram(self):
         m = load_fixture("mac-os.json")
@@ -440,6 +461,8 @@ class Validation(unittest.TestCase):
         errors, warnings = model.validate(m, "/nonexistent", "darwin", check_files=True)
         self.assertEqual(errors, [])
         self.assertTrue(any("Unmounted" in w for w in warnings))
+        # named the way the tab names it, not "ATA index 0"
+        self.assertTrue(any(w.startswith("Drive 1:") for w in warnings), warnings)
 
 
 class LibraryOps(unittest.TestCase):
@@ -471,14 +494,14 @@ class LibraryOps(unittest.TestCase):
     def test_write_launcher_is_executable_and_regenerated(self):
         with tempfile.TemporaryDirectory() as td:
             m = load_fixture("mac-os.json")
-            path, argv = command.write_launcher(m, "", td, "darwin")
+            path, argv = command.write_launcher(m, "/q", td, "darwin")
             self.assertEqual(path.name, "run.command")
             self.assertTrue(path.stat().st_mode & 0o111)
-            self.assertIn("Hand edits are lost", path.read_text())
+            self.assertIn("Do not edit", path.read_text())
             m.ram_mb = 768
-            path2, _ = command.write_launcher(m, "", td, "darwin")
+            path2, _ = command.write_launcher(m, "/q", td, "darwin")
             self.assertIn("-m 768", path2.read_text())
-            pb, _ = command.write_launcher(m, "", td, "win32")
+            pb, _ = command.write_launcher(m, "/q", td, "win32")
             self.assertEqual(pb.name, "run.bat")
             self.assertIn(b"\r\n", pb.read_bytes())
 

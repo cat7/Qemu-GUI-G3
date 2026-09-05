@@ -5,24 +5,54 @@
   "machine": "g3beige",
   "ram_mb": 512,
   "rom": "PowerMacG3v3.ROM",
-  "qemu_dir": "C:\\qemu-g3",
   "display": "sdl",
   "audio": "default",
   "onboard_romfile": "ati_mach_gt.rom",
-  "second_gpu": {"device": "ati-rage128-pro", "addr": "0x0e", "romfile": "ati_nexus128_103_pci.rom"},
-  "network": {"mode": "user", "mac": "00:05:02:12:34:56"},
-  "governor": {"mode": "default"},
+  "second_gpu": {
+    "device": "ati-rage128-pro",
+    "addr": "0x0e",
+    "romfile": "ati_nexus128_103_pci.rom"
+  },
+  "network": {
+    "mode": "user",
+    "mac": "00:05:02:12:34:56"
+  },
+  "governor": {
+    "mode": "default"
+  },
   "ata": [
-    {"kind": "disk", "file": "C:\\mac-hd\\9.2-pristine.img", "format": "raw"},
+    {
+      "kind": "disk",
+      "file": "C:\\mac-hd\\9.2-pristine.img",
+      "format": "raw"
+    },
     null,
     null,
     null
   ],
   "scsi": [
-    {"id": 0, "kind": "disk", "file": "scsiblank.img", "format": "raw",
-     "identity": {"vendor": "QUANTUM", "product": "FIREBALL ST4.3S", "ver": "0F0C"}},
-    {"id": 3, "kind": "cdrom", "file": "C:\\mac-iso\\8.1.iso", "format": "raw",
-     "identity": {"vendor": "MATSHITA", "product": "CD-ROM CR-8005", "ver": "1.0k"}}
+    {
+      "id": 0,
+      "kind": "disk",
+      "file": "scsiblank.img",
+      "format": "raw",
+      "identity": {
+        "vendor": "QUANTUM",
+        "product": "FIREBALL ST4.3S",
+        "ver": "0F0C"
+      }
+    },
+    {
+      "id": 3,
+      "kind": "cdrom",
+      "file": "C:\\mac-iso\\8.1.iso",
+      "format": "raw",
+      "identity": {
+        "vendor": "MATSHITA",
+        "product": "CD-ROM CR-8005",
+        "ver": "1.0k"
+      }
+    }
   ],
   "floppy": null,
   "extra_args": "",

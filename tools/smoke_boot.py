@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Smoke boot through the GUI's own Start path (MainWindow.start_selected).
 
-Scratch only: a fresh 1 GB raw disk at ATA index 0 and 8.1.iso as an ATA CD
-at index 2, cwd = the scratch machine folder, quit through QMP after 20 s.
-Never points at /Volumes/Macdata/qemu/hd/. Usage:
+Scratch only: a fresh 1 GB raw disk in Drive 1 and 8.1.iso as the CD in
+Drive 3, cwd = the scratch machine folder, quit through QMP after 20 s.
+Never points at /Volumes/Macdata/qemu/hd/.
 
-    python tools/smoke_boot.py <scratch-library> <qemu-dir> <8.1.iso>
+The scratch folder is made to look like an install: the emulator is linked
+into it and paths.use_install_dir() points the program at it, so nothing is
+written next to the real emulator. Usage:
+
+    python tools/smoke_boot.py <scratch-dir> <qemu-dir> <8.1.iso>
 """
 import json, os, signal, socket, sys, time
 from pathlib import Path
@@ -19,34 +23,42 @@ from qemugui.ui_main import MainWindow  # noqa: E402
 BAD = ("invalid option", "could not open", "Property .* not found", "not a valid")
 
 scratch = Path(sys.argv[1]).resolve()
-qemu_dir = sys.argv[2]
+qemu_dir = Path(sys.argv[2]).resolve()
 iso = sys.argv[3]
-folder = scratch / "smoke"
 assert not str(iso).startswith("/Volumes/Macdata/qemu/hd/")
+
+# make the scratch folder look like an install of the program
+scratch.mkdir(parents=True, exist_ok=True)
+for name in (paths.qemu_binary_name(), paths.qemu_img_name()):
+    link = scratch / name
+    if not link.exists():
+        link.symlink_to(qemu_dir / name)
+paths.use_install_dir(scratch)
+folder = paths.machines_dir() / "smoke"
 sock_path = scratch / "qmp.sock"
 if sock_path.exists():
     sock_path.unlink()
 
-settings_file = scratch / "settings.json"
-os.environ["QEMU_GUI_SETTINGS"] = str(settings_file)
-settings = paths.Settings(library_dir=str(scratch), qemu_dir=qemu_dir)
+settings_file = paths.settings_path()
+settings = paths.Settings()
+settings_file.parent.mkdir(parents=True, exist_ok=True)
 settings.save(settings_file)
 
-lib = model.Library(scratch)
+lib = model.Library()
 m = Machine(name="smoke", profile="custom", ram_mb=512,
-            rom=str(folder / "PowerMacG3v3.ROM"),
+            rom=str(qemu_dir / "PowerMacG3v3.ROM"),
             display="cocoa", audio="none",
-            onboard_romfile=str(folder / "ati_mach_gt.rom"),
-            second_gpu=SecondGpu("ati-rage128-pro", "0x0e", str(folder / "ati_nexus128_103_pci.rom")),
+            onboard_romfile=str(qemu_dir / "ati_mach_gt.rom"),
+            second_gpu=SecondGpu("ati-rage128-pro", "0x0e",
+                                 str(qemu_dir / "ati_nexus128_103_pci.rom")),
             network=Network(mode="none"),
             ata=[AtaDrive("disk", str(folder / "smoke.img"), "raw"), None, AtaDrive("cdrom", iso, "raw"), None],
             extra_args=f"-qmp unix:{sock_path},server=on,wait=off",
             notes="scratch smoke machine")
-for f in ("nvram.img", "pram.img"):
-    if (folder / f).exists():
-        (folder / f).unlink()
+folder.mkdir(parents=True, exist_ok=True)
 lib.save(m)
-errors, warnings = model.validate(m, qemu_dir)
+lib.clear_saved_settings("smoke")
+errors, warnings = model.validate(m, str(paths.install_dir()), machine_dir=str(folder))
 print("validate:", errors, warnings)
 assert not errors
 
@@ -72,7 +84,8 @@ log_text = (folder / "last-run.log").read_text(errors="replace")
 import re
 bad_lines = [ln for ln in log_text.splitlines() if any(re.search(p, ln) for p in BAD)]
 print("bad log lines:", bad_lines)
-sizes = {f: ((folder / f).stat().st_size if (folder / f).exists() else None) for f in ("nvram.img", "pram.img")}
+sizes = {f: ((folder / f).stat().st_size if (folder / f).exists() else None)
+         for f in model.SAVED_SETTINGS_FILES}
 print("managed files:", sizes)
 
 # quit via QMP

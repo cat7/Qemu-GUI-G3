@@ -1,4 +1,10 @@
-"""Where things live: settings file, machine library, QEMU folder discovery.
+"""Where everything is: the folder the program is installed in, the emulator
+beside it, and the Machines folder beside it.
+
+There is no configurable QEMU folder and no configurable machine library.
+Qemu-GUI is a companion to one copy of ``qemu-system-ppc``: it lives in the
+same folder as that program, and keeps its machines in a ``Machines`` folder
+next to itself.
 
 No Tk in here. Platform strings follow ``sys.platform``: ``darwin``,
 ``win32``, anything else is treated as Linux/POSIX.
@@ -15,21 +21,64 @@ from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 APP_NAME = "Qemu-GUI"
 HOST_PLATFORM = sys.platform  # "darwin" | "win32" | "linux"
 
-# Fallback browse folders (the user's image library on this Mac). Used only
-# if they exist; otherwise the file dialogs open in the home folder.
-BROWSE_FALLBACKS = {
-    "hd": Path("/Volumes/Macdata/qemu/hd"),
-    "iso": Path("/Volumes/Macdata/qemu/iso"),
-    "fd": Path("/Volumes/Macdata/qemu/fd"),
-    "rom": Path("/Volumes/Macdata/qemu/rom"),
-}
+MACHINES_DIR_NAME = "Machines"
+SETTINGS_FILE_NAME = "settings.json"
 
-# Places a deployed QEMU install may sit on this Mac (used for discovery).
-QEMU_DIR_CANDIDATES = [
-    Path("/Applications/qemu-system-ppc-g3-mac-os"),
-    Path("/Applications/qemu-system-ppc-g3-server12v3"),
-    Path("/Applications/qemu-system-ppc-g3-linux"),
-]
+# The folder holding qemu_gui.py, used when running from source.
+SOURCE_ROOT = Path(__file__).resolve().parent.parent
+
+# Set only by the tests and by tools/ scripts, which must not touch the real
+# install. There is deliberately no user-facing setting, no command-line
+# option and no environment variable for this.
+_install_dir_override: Path | None = None
+
+
+def use_install_dir(folder: Path | str | None) -> None:
+    """Testing hook: pretend the program is installed in *folder*."""
+    global _install_dir_override
+    _install_dir_override = Path(folder).expanduser().resolve() if folder else None
+
+
+def resolve_install_dir(*, frozen: bool, executable: str, source_root: str) -> Path:
+    """The folder a person sees this program in. Three cases:
+
+    * running from source -- the folder holding ``qemu_gui.py``;
+    * frozen inside a macOS application bundle -- ``sys.executable`` is
+      ``.../Qemu-GUI.app/Contents/MacOS/Qemu-GUI``, several levels below the
+      folder the bundle itself sits in, so walk up out of the ``.app``;
+    * frozen as a plain executable (Windows, Linux) -- the folder holding
+      the executable.
+
+    Pure: takes the three inputs, touches no globals and no filesystem
+    beyond resolving the path, so all three cases can be tested.
+    """
+    if not frozen:
+        return Path(source_root).resolve()
+    exe = Path(executable).resolve()
+    for parent in exe.parents:
+        if parent.suffix == ".app":
+            return parent.parent
+    return exe.parent
+
+
+def install_dir() -> Path:
+    """The one answer to "which folder am I installed in". Everything else --
+    finding the emulator, finding Machines -- goes through this."""
+    if _install_dir_override is not None:
+        return _install_dir_override
+    return resolve_install_dir(frozen=bool(getattr(sys, "frozen", False)),
+                               executable=sys.executable, source_root=str(SOURCE_ROOT))
+
+
+def machines_dir() -> Path:
+    """Where the machines are kept: a folder next to the program. Never
+    inside an application bundle, which must be treated as read-only."""
+    return install_dir() / MACHINES_DIR_NAME
+
+
+def settings_path() -> Path:
+    """The GUI's own scrap of state (which machine was selected last)."""
+    return machines_dir() / SETTINGS_FILE_NAME
 
 
 def is_windows(platform: str = HOST_PLATFORM) -> bool:
@@ -48,6 +97,20 @@ def launcher_name(platform: str = HOST_PLATFORM) -> str:
     return "run.bat" if is_windows(platform) else "run.command"
 
 
+def qemu_binary(platform: str = HOST_PLATFORM) -> Path:
+    return install_dir() / qemu_binary_name(platform)
+
+
+def qemu_img_binary(platform: str = HOST_PLATFORM) -> Path:
+    return install_dir() / qemu_img_name(platform)
+
+
+def has_qemu(folder: Path | str | None, platform: str = HOST_PLATFORM) -> bool:
+    if not folder:
+        return False
+    return (Path(folder) / qemu_binary_name(platform)).is_file()
+
+
 def pure_path(p: str, platform: str = HOST_PLATFORM) -> PurePath:
     """A path object for *platform* without touching the filesystem."""
     return PureWindowsPath(p) if is_windows(platform) else PurePosixPath(p)
@@ -61,69 +124,82 @@ def join_path(base: str, name: str, platform: str = HOST_PLATFORM) -> str:
     return str(pure_path(base, platform) / n)
 
 
-def settings_path(platform: str = HOST_PLATFORM) -> Path:
-    """Global settings file location (overridable with $QEMU_GUI_SETTINGS)."""
-    env = os.environ.get("QEMU_GUI_SETTINGS")
-    if env:
-        return Path(env)
-    if is_windows(platform):
-        base = Path(os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming")))
-        return base / APP_NAME / "settings.json"
-    if platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / APP_NAME / "settings.json"
-    base = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
-    return base / APP_NAME / "settings.json"
-
-
-def default_library_dir() -> Path:
-    return Path.home() / "Qemu-GUI-Machines"
-
-
-def app_dir() -> Path:
-    """Folder holding the GUI itself (script folder, or the PyInstaller bundle folder)."""
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent.parent
-
-
-def has_qemu(folder: Path | str | None, platform: str = HOST_PLATFORM) -> bool:
-    if not folder:
-        return False
-    return (Path(folder) / qemu_binary_name(platform)).is_file()
-
-
-def discover_qemu_dir(platform: str = HOST_PLATFORM) -> Path | None:
-    """Best guess for the folder holding qemu-system-ppc: next to the app,
-    the app's parent (a PyInstaller --onedir bundle placed inside the QEMU
-    folder), the deployed installs on this Mac, then PATH."""
-    candidates = [app_dir(), app_dir().parent, *QEMU_DIR_CANDIDATES]
-    for c in candidates:
-        if has_qemu(c, platform):
-            return c
-    for entry in os.environ.get("PATH", "").split(os.pathsep):
-        if entry and has_qemu(entry, platform):
-            return Path(entry)
-    return None
-
-
-def browse_start_dir(current: str | None, kind: str) -> Path:
-    """Folder a file dialog should open in: the current value's folder, else
-    the user's image library for *kind* (hd/iso/fd/rom), else home."""
-    if current:
-        p = Path(current).expanduser()
+def browse_start_dir(current: str | None, fallback: Path | str | None = None) -> Path:
+    """Folder a file dialog should open in: the folder of whatever is already
+    filled in, else *fallback* (normally this machine's own folder), else the
+    home folder. No guessed image libraries: nothing is ever pre-filled."""
+    for cand in (current, fallback):
+        if not cand:
+            continue
+        p = Path(str(cand)).expanduser()
         d = p if p.is_dir() else p.parent
         if d.is_dir():
             return d
-    fb = BROWSE_FALLBACKS.get(kind)
-    if fb is not None and fb.is_dir():
-        return fb
     return Path.home()
 
 
+# ------------------------------------------------------------ startup check
+
+MISSING_QEMU_MESSAGE = """\
+Qemu-GUI cannot find the emulator.
+
+Qemu-GUI has to sit in the same folder as the program that actually runs the
+old Mac, a file called "{binary}". There is no such file in:
+
+{folder}
+
+To put this right, move Qemu-GUI into the folder that holds "{binary}", the
+folder you would normally start the emulator from, and open Qemu-GUI again.
+
+Without the emulator there is nothing Qemu-GUI can do, so it will now close.\
+"""
+
+UNWRITABLE_MESSAGE = """\
+Qemu-GUI cannot create the folder it keeps your machines in.
+
+It tried to make a folder called "{name}" next to itself, in:
+
+{folder}
+
+but it was not allowed to. The reason given was:
+
+{reason}
+
+That folder is probably read-only. Move Qemu-GUI and the emulator together
+into a place you can write to, such as your home folder, and open Qemu-GUI
+again.
+
+Qemu-GUI will now close.\
+"""
+
+
+def startup_problem(platform: str = HOST_PLATFORM) -> str | None:
+    """A plain-language reason the program cannot run where it is, or None.
+
+    Refusing here is deliberate: there is no folder chooser and no degraded
+    mode. Qemu-GUI is a front end for the emulator sitting beside it.
+    """
+    folder = install_dir()
+    if not has_qemu(folder, platform):
+        return MISSING_QEMU_MESSAGE.format(binary=qemu_binary_name(platform), folder=f"    {folder}")
+    machines = machines_dir()
+    try:
+        machines.mkdir(parents=True, exist_ok=True)
+        probe = machines / ".write-test"
+        probe.write_text("", encoding="utf-8")
+        probe.unlink()
+    except OSError as e:
+        return UNWRITABLE_MESSAGE.format(name=MACHINES_DIR_NAME, folder=f"    {folder}",
+                                         reason=f"    {e}")
+    return None
+
+
+# ---------------------------------------------------------------- settings
+
 @dataclass
 class Settings:
-    library_dir: str = ""
-    qemu_dir: str = ""
+    """The only thing worth remembering between runs: the selected machine."""
+
     last_machine: str = ""
 
     @classmethod
@@ -133,16 +209,10 @@ class Settings:
         try:
             data = json.loads(Path(path).read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            data = {}
-        for k in ("library_dir", "qemu_dir", "last_machine"):
-            v = data.get(k)
-            if isinstance(v, str):
-                setattr(s, k, v)
-        if not s.library_dir:
-            s.library_dir = str(default_library_dir())
-        if not s.qemu_dir:
-            found = discover_qemu_dir()
-            s.qemu_dir = str(found) if found else ""
+            return s
+        v = data.get("last_machine") if isinstance(data, dict) else None
+        if isinstance(v, str):
+            s.last_machine = v
         return s
 
     def save(self, path: Path | None = None) -> None:

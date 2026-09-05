@@ -5,7 +5,6 @@
   "machine": "g3beige",
   "ram_mb": 512,
   "rom": "PowerMacG3v3.ROM",
-  "qemu_dir": "C:\\qemu-g3",
   "display": "sdl",
   "audio": "default",
   "onboard_romfile": "ati_mach_gt.rom",

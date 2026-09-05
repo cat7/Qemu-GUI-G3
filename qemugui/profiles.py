@@ -1,6 +1,8 @@
-"""OS profiles: defaults applied when a machine is created (editable after).
+"""The systems you might install, and sensible starting points for each.
 
-Profiles only seed the record. Nothing in ``command.py`` branches on them.
+A profile only seeds a new record and can be changed afterwards; nothing in
+``command.py`` branches on it. Profiles never fill in a hard disk or a CD:
+those start empty and are always the person's own choice.
 """
 
 from __future__ import annotations
@@ -15,29 +17,30 @@ class Profile:
     ram_mb: int
     display: str
     second_gpu: bool                # seed an ATI Rage 128 Pro in slot 0x0e
-    onboard_romfile: str | None     # Mach64 GT FCode ROM name in the QEMU folder
-    ata_default: tuple            # ("disk"|"cdrom"|None) x 4
+    onboard_romfile: str | None     # Mach64 GT FCode ROM name, beside the program
+    ata_default: tuple              # always four empty positions; no guessed paths
     notes: str = ""
 
 
 PROFILES: dict[str, Profile] = {
     "macos8_9": Profile(
-        "macos8_9", "Mac OS 8 / 9", 512, "sdl", True, "ati_mach_gt.rom",
+        "macos8_9", "Mac OS 8 or 9", 512, "sdl", True, "ati_mach_gt.rom",
         (None, None, None, None),
-        "OS 8.1 needs the SCSI CD or ATA CD at index 2."),
+        "Mac OS 8.1 wants its CD in Drive 3, or on the SCSI chain."),
     "macosx": Profile(
-        "macosx", "Mac OS X 10.x", 512, "sdl", True, "ati_mach_gt.rom",
+        "macosx", "Mac OS X (10.0 to 10.4)", 512, "sdl", True, "ati_mach_gt.rom",
         (None, None, None, None),
-        "Startup Disk in OS X delegates to the ROM: the bootable disk at index 0 wins."),
+        "Mac OS X leaves the choice of startup disk to the Mac itself, so put the system "
+        "you want to start in Drive 1."),
     "macosx_server": Profile(
-        "macosx_server", "Mac OS X Server 1.x", 1024, "cocoa", False, "ati_mach_gt.rom",
+        "macosx_server", "Mac OS X Server 1", 1024, "cocoa", False, "ati_mach_gt.rom",
         (None, None, None, None),
-        "The known-working configuration has no second graphics card."),
+        "This one is known to work best without an extra graphics card."),
     "linux": Profile(
         "linux", "Linux", 256, "sdl", False, "ati_gt_fcode.rom",
         (None, None, None, None), ""),
     "custom": Profile(
-        "custom", "Custom", 512, "sdl", False, None,
+        "custom", "Something else", 512, "sdl", False, None,
         (None, None, None, None), ""),
 }
 
@@ -50,7 +53,8 @@ DEFAULT_SECOND_GPU_ADDR = "0x0e"
 DEFAULT_ROM = "PowerMacG3v3.ROM"
 DEFAULT_MAC = "00:05:02:12:34:56"
 
-# Prefilled SCSI identity strings, exactly as the user writes them.
+# What a SCSI drive says it is when "Pretend" is ticked: a real Quantum disk
+# and a real Matsushita CD drive, which old installers recognise.
 DEFAULT_DISK_IDENTITY = {"vendor": "QUANTUM", "product": "FIREBALL ST4.3S", "ver": "0F0C"}
 DEFAULT_CDROM_IDENTITY = {"vendor": "MATSHITA", "product": "CD-ROM CR-8005", "ver": "1.0k"}
 

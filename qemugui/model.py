@@ -1,6 +1,14 @@
-"""The machine record: dataclasses, JSON load/save, validation, library ops.
+"""The machine record: dataclasses, JSON load/save, checks, machine folders.
 
 No Tk in here. ``machine.json`` schema version 1 (see doc/HANDOFF-qemu-gui.md).
+
+Two rules this file exists to enforce:
+
+* Machines live in the ``Machines`` folder next to the program. There is no
+  configurable location and no per-machine emulator override.
+* **Nothing here ever deletes a disk image.** Deleting a machine removes the
+  handful of files Qemu-GUI itself wrote (see ``OWNED_FILES``) and leaves
+  every other file, disk images above all, exactly where it is.
 """
 
 from __future__ import annotations
@@ -8,7 +16,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
-from dataclasses import dataclass, field, asdict, replace
+from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
 
@@ -22,9 +30,55 @@ NAME_RE = re.compile(r"^[A-Za-z0-9._ -]+$")
 MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 ADDR_RE = re.compile(r"^(0x[0-9A-Fa-f]{1,2}|[0-9]{1,2})(\.[0-7])?$")
 
-ATA_SLOT_NAMES = ["index 0 - bus 0 master", "index 1 - bus 0 slave",
-                  "index 2 - bus 1 master", "index 3 - bus 1 slave"]
-SCSI_IDS = list(range(7))          # 7 is the controller
+# ---------------------------------------------------------------- naming
+#
+# The four positions on the Mac's built-in drive cable, and the numbers on
+# its SCSI chain, are named for someone who has never heard of a bus or a
+# master/slave pair -- with the hardware term kept alongside so that someone
+# who has heard of them is never left guessing which position is which.
+#
+# Each entry: (name, what it is for, what the hardware calls it).
+ATA_SLOTS = (
+    ("Drive 1", "the Mac starts up from this one", "IDE bus 0, master — index 0"),
+    ("Drive 2", "room for a second hard disk", "IDE bus 0, slave — index 1"),
+    ("Drive 3", "the usual place for the CD drive", "IDE bus 1, master — index 2"),
+    ("Drive 4", "room for a fourth drive", "IDE bus 1, slave — index 3"),
+)
+ATA_STARTUP_SLOT = 0        # the position the Mac starts up from
+ATA_CD_SLOT = 2             # where a CD is expected
+
+
+def ata_slot_name(i: int) -> str:
+    return ATA_SLOTS[i][0]
+
+
+def ata_slot_hint(i: int) -> str:
+    """The quiet second line: purpose first, hardware term in brackets."""
+    _, purpose, tech = ATA_SLOTS[i]
+    return f"{purpose}  ({tech})"
+
+
+def ata_slot_full(i: int) -> str:
+    """One line naming a position unambiguously, for menus and messages."""
+    name, purpose, tech = ATA_SLOTS[i]
+    return f"{name} — {purpose} ({tech})"
+
+
+SCSI_IDS = list(range(7))          # 7 is the Mac itself
+SCSI_SELF_ID = 7
+
+
+def scsi_name(sid: int) -> str:
+    return f"Device {sid}"
+
+
+def scsi_full(sid: int) -> str:
+    return f"{scsi_name(sid)} (SCSI ID {sid})"
+
+
+SCSI_SELF_HINT = ("the Mac itself — its own SCSI controller answers on this number, "
+                  "so you cannot give it to a drive")
+
 DRIVE_KINDS = ("disk", "cdrom")
 FORMATS = ("raw", "qcow2")
 DISPLAYS = {"darwin": ("sdl", "cocoa"), "win32": ("sdl", "gtk"), "linux": ("sdl", "gtk")}
@@ -34,13 +88,32 @@ NETWORK_MODES = ("none", "user", "vmnet-bridged", "vmnet-shared", "vmnet-host", 
 NETWORK_MODE_PLATFORM = {"none": None, "user": None, "vmnet-bridged": "darwin",
                          "vmnet-shared": "darwin", "vmnet-host": "darwin", "tap": "win32"}
 NETWORK_MODES_WITH_IFNAME = ("vmnet-bridged", "tap")
-SCSI_SELF_ID = 7                   # the Macintosh itself (MESH controller)
 GOVERNOR_MODES = ("default", "off", "mips")
 RAM_CHOICES = (128, 256, 512, 768, 1024)
 RAM_MIN, RAM_MAX = 32, 4096
 SECOND_GPU_SUPPORTED = ("ati-rage128-pro",)
 SECOND_GPU_EXPERIMENTAL = ("ati-vga", "VGA", "cirrus-vga")
-MANAGED_FILES = ("nvram.img", "pram.img")
+
+# The Mac's own saved settings (startup disk, date and time, screen depth).
+# QEMU writes these two into the machine folder on every run.
+SAVED_SETTINGS_FILES = ("nvram.img", "pram.img")
+MANAGED_FILES = SAVED_SETTINGS_FILES     # old name, still used by the tools
+
+# The complete list of files Qemu-GUI is allowed to delete from a machine
+# folder. Anything not on this list -- above all a disk image -- is left
+# alone, whatever it is called. This list is the whole safety story: it is
+# an allow-list, not a deny-list, so a new kind of file is safe by default.
+OWNED_FILES = ("machine.json", "run.command", "run.bat", "last-run.log",
+               "nvram.img", "pram.img", ".DS_Store")
+
+# Only used to word messages ("your disk images are still there"); nothing is
+# deleted or kept on the strength of an extension.
+IMAGE_SUFFIXES = {".img", ".dsk", ".qcow2", ".iso", ".toast", ".cdr", ".dmg",
+                  ".hfv", ".hfs", ".vmdk", ".raw"}
+
+
+def looks_like_disk_image(name: str) -> bool:
+    return Path(name).suffix.lower() in IMAGE_SUFFIXES
 
 
 @dataclass
@@ -197,7 +270,6 @@ class Machine:
     machine: str = "g3beige"
     ram_mb: int = 512
     rom: str = DEFAULT_ROM
-    qemu_dir: str | None = None
     display: str = "sdl"
     audio: str = "default"
     onboard_romfile: str | None = None
@@ -219,7 +291,6 @@ class Machine:
             "machine": self.machine,
             "ram_mb": self.ram_mb,
             "rom": self.rom,
-            "qemu_dir": self.qemu_dir,
             "display": self.display,
             "audio": self.audio,
             "onboard_romfile": self.onboard_romfile,
@@ -235,6 +306,8 @@ class Machine:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Machine":
+        # A "qemu_dir" key written by an older version is read and dropped:
+        # the emulator is now always the one next to the program.
         ata_raw = list(d.get("ata") or [])
         ata = [AtaDrive.from_dict(x) for x in ata_raw][:4]
         while len(ata) < 4:
@@ -246,7 +319,6 @@ class Machine:
             machine=str(d.get("machine", "g3beige")),
             ram_mb=int(d.get("ram_mb", 512)),
             rom=str(d.get("rom") or DEFAULT_ROM),
-            qemu_dir=(str(d["qemu_dir"]) if d.get("qemu_dir") else None),
             display=str(d.get("display", "sdl")),
             audio=str(d.get("audio", "default")),
             onboard_romfile=(str(d["onboard_romfile"]) if d.get("onboard_romfile") else None),
@@ -292,9 +364,8 @@ class Machine:
         return None
 
     def first_unfilled_ata(self) -> int | None:
-        """First ATA slot that carries no image: empty, or a profile-seeded
-        placeholder (kind set, file empty). Index 0 is seeded by every OS
-        profile, so first_empty_ata() would skip it."""
+        """First drive position carrying no image: empty, or a row where a
+        type was chosen but no file picked."""
         for i, d in enumerate(self.ata):
             if d is None or not d.file:
                 return i
@@ -302,27 +373,26 @@ class Machine:
 
     def ata_slot_status(self, i: int) -> str:
         d = self.ata[i]
-        if d is None:
-            return "empty"
-        if not d.file:
+        if d is None or not d.file:
             return "empty"
         return f"replace {Path(d.file).name}"
 
-    def effective_qemu_dir(self, settings_qemu_dir: str) -> str:
-        return self.qemu_dir or settings_qemu_dir
+    def image_paths(self) -> list[str]:
+        """Every image this record points at, in no particular order."""
+        return [f for _label, f in _image_files(self) if f]
 
 
 def new_machine(name: str, profile_id: str, qemu_dir: str | None) -> Machine:
-    """Seed a record from an OS profile. Onboard ROM is seeded only if the
-    file exists in the QEMU folder (else none); the second card is seeded
-    unconditionally for the profiles that want one."""
+    """Seed a record from a system profile. Drive positions start empty: no
+    guessed disk or CD paths, ever. The onboard graphics ROM is seeded only
+    if that file is actually sitting next to the emulator."""
     p = PROFILES[normalise_profile_id(profile_id)]
     m = Machine(name=name, profile=p.id, ram_mb=p.ram_mb, display=p.display, notes=p.notes)
     if p.onboard_romfile and qemu_dir and (Path(qemu_dir) / p.onboard_romfile).is_file():
         m.onboard_romfile = p.onboard_romfile
     if p.second_gpu:
         m.second_gpu = SecondGpu()
-    m.ata = [AtaDrive(kind=k) if k else None for k in p.ata_default]
+    m.ata = [None, None, None, None]
     return m
 
 
@@ -331,111 +401,141 @@ def default_identity(kind: str) -> Identity:
     return Identity(**src)
 
 
-# ---------------------------------------------------------------- validation
+# ---------------------------------------------------------------- checking
 
 def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFORM,
-             check_files: bool = True) -> tuple[list[str], list[str]]:
-    """Return (errors, warnings). Save is blocked on errors, allowed on warnings."""
+             check_files: bool = True, machine_dir: str | None = None) -> tuple[list[str], list[str]]:
+    """Return (things that must be fixed, things worth knowing). Saving is
+    blocked by the first list, allowed with the second.
+
+    Wording here reaches the person as-is, so it says what to do, not what
+    the internals are called.
+    """
     errors: list[str] = []
     warnings: list[str] = []
 
     if not m.name or not NAME_RE.match(m.name) or m.name.strip() != m.name:
-        errors.append("Name must be non-empty, use only letters, digits, space, '.', '_' or '-', "
-                      "and not start or end with a space.")
+        errors.append("Give this machine a name. Letters, numbers, spaces and the "
+                      "characters . _ - are fine; a name cannot start or end with a space.")
     if not (RAM_MIN <= m.ram_mb <= RAM_MAX):
-        errors.append(f"RAM must be between {RAM_MIN} and {RAM_MAX} MB.")
+        errors.append(f"Memory has to be a number between {RAM_MIN} and {RAM_MAX} MB.")
     elif m.ram_mb > 1024:
-        warnings.append("RAM above 1024 MB is untested (real hardware maxes at 768 MB).")
+        warnings.append("More than 1024 MB of memory is untested. The real machine could not "
+                        "take more than 768 MB, and old systems can be unhappy with more.")
     if m.display == "cocoa" and platform != "darwin":
-        warnings.append("Display 'cocoa' only exists on macOS; use sdl or gtk here.")
+        warnings.append("The 'cocoa' window only exists on a Mac. Choose 'sdl' or 'gtk' here.")
     net = m.network
     if net.mode not in NETWORK_MODES:
-        errors.append(f"Unknown network mode '{net.mode}'.")
+        errors.append(f"'{net.mode}' is not a network setting Qemu-GUI knows.")
     else:
         if net.mode != "none" and not MAC_RE.match(net.mac):
-            errors.append("MAC address must look like 00:05:02:12:34:56.")
+            errors.append("The network card's hardware address has to look like "
+                          "00:05:02:12:34:56 (six pairs of digits and letters a-f).")
         if net.mode in NETWORK_MODES_WITH_IFNAME and not net.ifname.strip():
-            errors.append(f"Network mode {net.mode} needs an interface name "
-                          f"({'en0 etc.' if net.mode == 'vmnet-bridged' else 'the TAP-Windows adapter name'}).")
+            errors.append("Say which of this computer's network connections the Mac should "
+                          + ("join (on a Mac that is usually en0)." if net.mode == "vmnet-bridged"
+                             else "use (the name of the TAP adapter in Network Connections)."))
         host = "win32" if paths.is_windows(platform) else platform
         if net.platform is not None and net.platform != host:
-            warnings.append(f"Network mode {net.mode} is for "
-                            f"{'macOS' if net.platform == 'darwin' else 'Windows'}; it will not work here.")
+            warnings.append("This network setting only works on "
+                            f"{'a Mac' if net.platform == 'darwin' else 'Windows'}, so it will "
+                            "not work on this computer.")
     if m.governor.mode == "mips" and not (1 <= m.governor.mips <= 100000):
-        errors.append("Custom MIPS must be between 1 and 100000.")
+        errors.append("The speed setting has to be a number between 1 and 100000.")
     if m.second_gpu:
         if m.second_gpu.addr and not ADDR_RE.match(m.second_gpu.addr):
-            errors.append("Second card slot must be a PCI address like 0x0e.")
+            errors.append("The extra graphics card's slot has to look like 0x0e.")
         if m.second_gpu.device in SECOND_GPU_EXPERIMENTAL:
-            warnings.append(f"Second card '{m.second_gpu.device}' is unsupported/experimental.")
+            warnings.append("That extra graphics card is untested and probably will not work. "
+                            "The ATI Rage 128 Pro is the one that does.")
         if m.second_gpu.device == "ati-rage128-pro" and not m.second_gpu.romfile:
-            warnings.append("ATI Rage 128 Pro without a card ROM will not drive a display "
-                            "under Mac OS.")
+            warnings.append("The extra graphics card has no card ROM, so Mac OS will not be "
+                            "able to put a picture on it.")
 
     seen_ids = set()
-    scsi_cd = False
     for s in m.scsi:
         if s.id in seen_ids:
-            errors.append(f"Two SCSI drives use id {s.id}.")
+            errors.append(f"Two SCSI drives are both set to device {s.id}. Each one needs "
+                          "its own number.")
         seen_ids.add(s.id)
         if s.id == SCSI_SELF_ID:
-            errors.append("SCSI id 7 is the computer (the MESH controller itself).")
+            errors.append(f"SCSI device {SCSI_SELF_ID} is the Mac itself, so no drive can use "
+                          "that number. Numbers 0 to 6 are free.")
         elif s.id not in SCSI_IDS:
-            errors.append(f"SCSI id {s.id} is out of range (0..6; 7 is the computer).")
+            errors.append(f"SCSI device {s.id} does not exist. Use a number from 0 to 6 "
+                          f"({SCSI_SELF_ID} is the Mac itself).")
         if s.kind not in DRIVE_KINDS:
-            errors.append(f"SCSI id {s.id}: unknown kind '{s.kind}'.")
-        if not s.file:
-            continue            # no image = empty slot, silently skipped
-        if s.kind == "cdrom":
-            scsi_cd = True
+            errors.append(f"SCSI device {s.id}: choose whether it is a hard disk or a CD.")
     if len(m.ata) != 4:
-        errors.append("ATA table must have exactly 4 slots.")
-    ata_cd_elsewhere = False
+        errors.append("There are always exactly four drive positions.")
+    cd_in_wrong_place = False
     for i, d in enumerate(m.ata):
         if d is None or not d.file:
-            continue            # no image = empty slot, silently skipped
+            continue            # nothing chosen here: an empty position, quietly ignored
         if d.kind not in DRIVE_KINDS:
-            errors.append(f"ATA index {i}: unknown kind '{d.kind}'.")
-        if d.kind == "cdrom" and i != 2:
-            ata_cd_elsewhere = True
-    if ata_cd_elsewhere and (m.ata[2] is None or not m.ata[2].file):
-        warnings.append("An ATA CD-ROM is configured but index 2 is empty: QEMU adds a medialess "
-                        "phantom CD-ROM at index 2 itself, so put the CD at index 2.")
+            errors.append(f"{ata_slot_name(i)}: choose whether it is a hard disk or a CD.")
+        if d.kind == "cdrom" and i != ATA_CD_SLOT:
+            cd_in_wrong_place = True
+    if cd_in_wrong_place and (m.ata[ATA_CD_SLOT] is None or not m.ata[ATA_CD_SLOT].file):
+        warnings.append(f"Your CD is not in {ata_slot_name(ATA_CD_SLOT)}. The Mac always expects "
+                        f"a CD drive there and will make an empty one, which can hide the CD you "
+                        f"did put in. Move the CD to {ata_slot_name(ATA_CD_SLOT)}.")
 
     if check_files:
-        qd = m.effective_qemu_dir(qemu_dir or "")
-        if not qd:
-            warnings.append("No QEMU folder set (Settings or per-machine override).")
-        elif not paths.has_qemu(qd, platform):
-            warnings.append(f"QEMU binary not found in {qd}.")
-        else:
-            for label, rel in (("ROM", m.rom), ("onboard graphics ROM", m.onboard_romfile),
-                               ("second card ROM", m.second_gpu.romfile if m.second_gpu else None)):
+        qd = qemu_dir or ""
+        if qd and paths.has_qemu(qd, platform):
+            for label, rel in (("The Mac's ROM", m.rom),
+                               ("The built-in graphics ROM", m.onboard_romfile),
+                               ("The extra graphics card's ROM",
+                                m.second_gpu.romfile if m.second_gpu else None)):
                 if rel and not Path(paths.join_path(qd, rel, platform)).is_file():
-                    warnings.append(f"{label} file not found: {paths.join_path(qd, rel, platform)}")
+                    warnings.append(f"{label} is missing: there is no file "
+                                    f"{paths.join_path(qd, rel, platform)}.")
         for label, f in _image_files(m):
-            if f and not Path(f).expanduser().is_file():
-                warnings.append(f"{label}: image not found (unmounted volume?): {f}")
+            if not f:
+                continue
+            p = Path(f).expanduser()
+            if not p.is_absolute():
+                if machine_dir is None:
+                    continue
+                p = Path(machine_dir) / p
+            if not p.is_file():
+                warnings.append(f"{label}: the file {f} is not there. If it lives on a disk or "
+                                "a memory stick, plug it in before starting the machine.")
     return errors, warnings
 
 
 def _image_files(m: Machine):
     for i, d in enumerate(m.ata):
         if d:
-            yield f"ATA index {i}", d.file
+            yield ata_slot_name(i), d.file
     for s in m.scsi:
-        yield f"SCSI id {s.id}", s.file
+        yield scsi_name(s.id), s.file
     if m.floppy:
-        yield "Floppy", m.floppy.file
+        yield "The floppy disk", m.floppy.file
 
 
-# ---------------------------------------------------------------- library
+# ---------------------------------------------------------------- machines
+
+@dataclass
+class DeleteResult:
+    """What ``Library.delete`` actually did."""
+
+    folder: Path
+    removed: list[str] = field(default_factory=list)
+    kept: list[str] = field(default_factory=list)
+    folder_removed: bool = False
+
+    @property
+    def kept_images(self) -> list[str]:
+        return [f for f in self.kept if looks_like_disk_image(f)]
+
 
 class Library:
-    """The folder of machine folders. Machine name == folder name."""
+    """The Machines folder: one subfolder per machine, named after it."""
 
-    def __init__(self, root: Path | str):
-        self.root = Path(root).expanduser()
+    def __init__(self, root: Path | str | None = None):
+        self.root = Path(root).expanduser() if root else paths.machines_dir()
 
     def ensure(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -466,18 +566,27 @@ class Library:
             try:
                 out.append(self.load(n))
             except (OSError, ValueError, KeyError, TypeError):
-                out.append(Machine(name=n, notes="(machine.json could not be read)"))
+                out.append(Machine(name=n, notes="(this machine's settings file could not be read)"))
         return out
 
     def save(self, m: Machine, old_name: str | None = None) -> Path:
-        """Write machine.json; rename the folder if the name changed."""
+        """Write machine.json; rename the folder if the name changed.
+
+        Renaming moves the folder, so any image kept inside it moves with it:
+        the record is re-pointed at the new location rather than left aiming
+        at a path that no longer exists. Nothing is deleted or overwritten.
+        """
         if not NAME_RE.match(m.name):
             raise ValueError("illegal machine name")
         self.ensure()
         if old_name and old_name != m.name and self.folder(old_name).is_dir():
             if self.folder(m.name).exists():
-                raise FileExistsError(f"A machine named '{m.name}' already exists.")
-            self.folder(old_name).rename(self.folder(m.name))
+                raise FileExistsError(f"A machine called '{m.name}' already exists.")
+            old_folder, new_folder = self.folder(old_name), self.folder(m.name)
+            moved = [(old_folder, new_folder),
+                     (old_folder.resolve(), new_folder.parent.resolve() / new_folder.name)]
+            old_folder.rename(new_folder)
+            _repoint_images(m, moved)
         self.folder(m.name).mkdir(parents=True, exist_ok=True)
         m.save(self.json_path(m.name))
         return self.folder(m.name)
@@ -486,44 +595,138 @@ class Library:
         return self.folder(name).exists()
 
     def duplicate(self, name: str, new_name: str) -> Machine:
-        """Copy machine.json (+ nvram/pram if present). Disk images are NOT
-        copied: the duplicate points at the same image files."""
+        """Copy the record (and the Mac's saved settings) into a new folder.
+        Disk images are not copied and not touched: the copy starts out
+        pointing at the same image files."""
         if self.exists(new_name):
-            raise FileExistsError(f"A machine named '{new_name}' already exists.")
+            raise FileExistsError(f"A machine called '{new_name}' already exists.")
         m = self.load(name)
         m.name = new_name
         self.save(m)
-        for f in MANAGED_FILES:
+        for f in SAVED_SETTINGS_FILES:
             src = self.folder(name) / f
-            if src.is_file():
-                shutil.copy2(src, self.folder(new_name) / f)
+            dst = self.folder(new_name) / f
+            if src.is_file() and not dst.exists():
+                shutil.copy2(src, dst)
         return m
 
     def folder_contents(self, name: str) -> list[str]:
         d = self.folder(name)
         if not d.is_dir():
             return []
-        return sorted(str(p.relative_to(d)) for p in d.rglob("*") if p.is_file())
+        return sorted(str(p.relative_to(d)) for p in d.rglob("*") if p.is_file() or p.is_symlink())
 
-    def delete(self, name: str) -> None:
-        """Delete the machine folder only. Never touches files outside it."""
+    def delete_preview(self, name: str) -> tuple[list[str], list[str]]:
+        """(files Delete would remove, files Delete would leave behind) --
+        so the person can be told before anything happens."""
+        contents = self.folder_contents(name)
+        removed = [f for f in contents if f in OWNED_FILES]
+        kept = [f for f in contents if f not in OWNED_FILES]
+        return removed, kept
+
+    def delete(self, name: str) -> DeleteResult:
+        """Remove this machine's record, launcher and saved settings.
+
+        Only the names in ``OWNED_FILES`` are ever deleted, and only directly
+        inside the machine's own folder. A disk image -- whatever it is
+        called, wherever it sits -- is never deleted, and the folder itself
+        stays if anything is left in it.
+        """
         d = self.folder(name)
-        if d.is_dir() and d.parent == self.root:
-            shutil.rmtree(d)
+        result = DeleteResult(folder=d)
+        if not d.is_dir() or d.resolve().parent != self.root.resolve():
+            return result
+        for f in OWNED_FILES:
+            p = d / f
+            if p.is_symlink() or p.is_file():
+                try:
+                    p.unlink()
+                except OSError:
+                    continue
+                result.removed.append(f)
+        result.kept = self.folder_contents(name)
+        if not result.kept:
+            # rmdir refuses on anything that is not empty, so this cannot
+            # take a file with it.
+            for sub in sorted((p for p in d.rglob("*") if p.is_dir()),
+                              key=lambda p: len(p.parts), reverse=True):
+                try:
+                    sub.rmdir()
+                except OSError:
+                    pass
+            try:
+                d.rmdir()
+                result.folder_removed = True
+            except OSError:
+                pass
+        return result
 
-    def managed_status(self, name: str) -> dict[str, int | None]:
+    def saved_settings_status(self, name: str) -> dict[str, int | None]:
         """{'nvram.img': size|None, 'pram.img': size|None}"""
         out: dict[str, int | None] = {}
-        for f in MANAGED_FILES:
+        for f in SAVED_SETTINGS_FILES:
             p = self.folder(name) / f
             out[f] = p.stat().st_size if p.is_file() else None
         return out
 
-    def reset_nvram_pram(self, name: str) -> list[str]:
+    managed_status = saved_settings_status      # old name, still used by the tools
+
+    def clear_saved_settings(self, name: str) -> list[str]:
+        """Delete nvram.img / pram.img -- fixed names, never an image."""
         removed = []
-        for f in MANAGED_FILES:
+        for f in SAVED_SETTINGS_FILES:
             p = self.folder(name) / f
             if p.is_file():
                 p.unlink()
                 removed.append(f)
         return removed
+
+    reset_nvram_pram = clear_saved_settings     # old name, still used by the tools
+
+
+IMAGE_NAME_SUFFIXES = (".img", ".qcow2", ".dsk")
+
+
+def check_new_image_path(folder: Path | str, name: str, fmt: str) -> tuple[Path | None, str | None]:
+    """Where a new disk image would be created, or a plain reason it cannot be.
+
+    Refusing to write over anything that already exists is the point of this
+    function: a disk image can be a whole afternoon of installing an old
+    system, and Qemu-GUI never overwrites one.
+    """
+    name = (name or "").strip()
+    if not name:
+        return None, "Give the disk a name."
+    if "/" in name or "\\" in name or name in (".", ".."):
+        return None, "Use a plain name without any slashes, such as 'Mac OS 9'."
+    if not name.lower().endswith(IMAGE_NAME_SUFFIXES):
+        name += ".qcow2" if fmt == "qcow2" else ".img"
+    target = Path(folder) / name
+    if target.exists() or target.is_symlink():
+        return None, (f"There is already a file called {name} in this machine's folder. "
+                      "Qemu-GUI will not write over it, in case it is a disk you still "
+                      "need. Choose another name.")
+    return target, None
+
+
+def _repoint_images(m: Machine, moved: list[tuple[Path, Path]]) -> None:
+    """After a folder rename, point image paths at the folder's new place, so
+    an image kept inside the machine's folder is never left orphaned."""
+    def fixed(p: str) -> str:
+        if not p:
+            return p
+        for old_folder, new_folder in moved:
+            try:
+                rel = Path(p).relative_to(old_folder)
+            except ValueError:
+                continue
+            return str(new_folder / rel)
+        return p
+
+    for d in m.ata:
+        if d:
+            d.file = fixed(d.file)
+    for s in m.scsi:
+        s.file = fixed(s.file)
+    if m.floppy:
+        m.floppy.file = fixed(m.floppy.file)

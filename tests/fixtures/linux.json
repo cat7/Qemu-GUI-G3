@@ -5,17 +5,25 @@
   "machine": "g3beige",
   "ram_mb": 256,
   "rom": "PowerMacG3v3.ROM",
-  "qemu_dir": "/Applications/qemu-system-ppc-g3-linux",
   "display": "sdl",
   "audio": "default",
   "onboard_romfile": "ati_gt_fcode.rom",
   "second_gpu": null,
-  "network": {"mode": "user", "mac": "00:05:02:12:34:56"},
-  "governor": {"mode": "default"},
+  "network": {
+    "mode": "user",
+    "mac": "00:05:02:12:34:56"
+  },
+  "governor": {
+    "mode": "default"
+  },
   "ata": [
     null,
     null,
-    {"kind": "cdrom", "file": "/Users/hsp/Downloads/debian-8.11.0-powerpc-CD-1.iso", "format": "raw"},
+    {
+      "kind": "cdrom",
+      "file": "/Users/hsp/Downloads/debian-8.11.0-powerpc-CD-1.iso",
+      "format": "raw"
+    },
     null
   ],
   "scsi": [],

@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Qemu-GUI entry point: a portable launcher for the QEMU Beige G3 machine.
+"""Qemu-GUI: start an emulated PowerMac G3.
 
-    python qemu_gui.py [--settings FILE] [--library DIR] [--qemu-dir DIR]
+Qemu-GUI runs from the folder that holds qemu-system-ppc and keeps its
+machines in a "Machines" folder next to itself. There is nothing to
+configure and nothing to point at.
+
+    python qemu_gui.py
 
 Standard library only (tkinter). See README.md.
 """
@@ -16,35 +20,52 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from qemugui import paths  # noqa: E402
 
+NO_TKINTER = """\
+Qemu-GUI needs Python's tkinter, and this Python does not have it.
 
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--settings", help="settings.json to use (default: per-user location)")
-    ap.add_argument("--library", help="machine library folder (overrides and saves the setting)")
-    ap.add_argument("--qemu-dir", help="folder with qemu-system-ppc, qemu-img and ROMs (overrides and saves)")
-    args = ap.parse_args(argv)
+On macOS, install Python from python.org (Homebrew's python3 has no tkinter).
+On Windows, re-run the python.org installer and tick "tcl/tk and IDLE".\
+"""
 
-    settings_path = Path(args.settings) if args.settings else paths.settings_path()
-    settings = paths.Settings.load(settings_path)
-    if args.library:
-        settings.library_dir = args.library
-    if args.qemu_dir:
-        settings.qemu_dir = args.qemu_dir
+EXIT_CANNOT_RUN = 3
+EXIT_NO_TKINTER = 2
+
+
+def report_problem_on_screen(message: str) -> None:
+    """Say it in a window if we can, and on the terminal either way."""
+    print(message, file=sys.stderr)
     try:
-        settings.save(settings_path)
-    except OSError as e:
-        print(f"warning: cannot save settings to {settings_path}: {e}", file=sys.stderr)
+        import tkinter as tk
+        from tkinter import messagebox
+    except ImportError:
+        return
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("Qemu-GUI", message)
+        root.destroy()
+    except Exception:      # no display: the terminal message stands
+        pass
+
+
+def main(argv=None, report_problem=None) -> int:
+    argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args(argv)
+    report = report_problem or report_problem_on_screen
+
+    problem = paths.startup_problem()
+    if problem:
+        report(problem)
+        return EXIT_CANNOT_RUN
 
     try:
         import tkinter  # noqa: F401
     except ImportError:
-        print("This Python has no tkinter. On macOS use the python.org installer or a venv made "
-              "from it (Homebrew's python3 lacks _tkinter); on Windows tick 'tcl/tk' in the "
-              "python.org installer.", file=sys.stderr)
-        return 2
+        report(NO_TKINTER)
+        return EXIT_NO_TKINTER
 
     from qemugui.ui_main import MainWindow
-    app = MainWindow(settings, settings_path)
+    settings_file = paths.settings_path()
+    app = MainWindow(paths.Settings.load(settings_file), settings_file)
     app.mainloop()
     return 0
 
