@@ -141,17 +141,7 @@ def browse_start_dir(current: str | None, fallback: Path | str | None = None) ->
 # ------------------------------------------------------------ startup check
 
 MISSING_QEMU_MESSAGE = """\
-Qemu-GUI cannot find the emulator.
-
-Qemu-GUI has to sit in the same folder as the program that actually runs the
-old Mac, a file called "{binary}". There is no such file in:
-
-{folder}
-
-To put this right, move Qemu-GUI into the folder that holds "{binary}", the
-folder you would normally start the emulator from, and open Qemu-GUI again.
-
-Without the emulator there is nothing Qemu-GUI can do, so it will now close.\
+To run this GUI, put it in a folder containing a "{binary}" application.\
 """
 
 UNWRITABLE_MESSAGE = """\

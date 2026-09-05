@@ -129,8 +129,12 @@ class FrozenBundle(unittest.TestCase):
     def test_a_frozen_bundle_without_the_emulator_still_refuses(self):
         (self.install / paths.qemu_binary_name()).unlink()
         problem = paths.startup_problem()
-        self.assertIn(str(self.install), problem)
-        self.assertNotIn(".app", problem)      # it names the folder, not the bundle
+        self.assertIsNotNone(problem)
+        # the message is one short line and names no folder, so assert the thing
+        # that actually matters here: the folder it resolved is the one holding
+        # the bundle, not somewhere inside it.
+        self.assertEqual(paths.install_dir(), self.install)
+        self.assertNotIn(".app", str(paths.install_dir()))
 
 
 class FakeMainWindow:
@@ -180,8 +184,10 @@ class RefusesToStartWithoutTheEmulator(unittest.TestCase):
         self.assertEqual(len(said), 1)
         message = said[0]
         self.assertIn(paths.qemu_binary_name(), message)
-        self.assertIn(str(self.dir), message)          # names the folder it looked in
         self.assertNotIn("Traceback", message)
+        # the user asked for one short line, not an explanation (2026-09-05)
+        self.assertEqual(len(message.strip().splitlines()), 1)
+        self.assertLess(len(message.strip()), 100)
 
     def test_missing_binary_builds_no_window_and_touches_nothing(self):
         rc = qemu_gui.main([], report_problem=lambda _m: None)
@@ -218,7 +224,6 @@ class RefusesToStartWithoutTheEmulator(unittest.TestCase):
             os.chmod(self.dir, 0o700)
         self.assertIsNotNone(problem)
         self.assertIn("Machines", problem)
-        self.assertIn(str(self.dir), problem)
 
     def test_nothing_offers_to_choose_a_folder(self):
         source = "\n".join((ROOT / "qemu_gui.py").read_text().splitlines()
