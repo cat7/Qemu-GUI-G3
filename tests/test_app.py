@@ -235,6 +235,26 @@ class RefusesToStartWithoutTheEmulator(unittest.TestCase):
             self.assertNotIn(gone, source, gone)
 
 
+class TheEditorFillsNothingIn(unittest.TestCase):
+    """A source-level guard for the rule the user restated on 2026-09-05: the
+    editor must not put a file into a field by itself. The record-level proof
+    is in test_command.NothingIsChosenForYou; this catches the interface
+    growing a new "helpful" default later."""
+
+    def test_the_editor_has_no_pre_filling_left_in_it(self):
+        src = (ROOT / "qemugui" / "ui_machine.py").read_text()
+        for gone in ("SecondGpu().romfile",          # seeded the card ROM
+                     "_reapply_profile",             # re-applied a profile's files
+                     "PowerMacG3v3"):                # a ROM name as a value
+            self.assertNotIn(gone, src, gone)
+
+    def test_no_profile_carries_a_file_to_seed(self):
+        from qemugui import profiles
+        for p in profiles.PROFILES.values():
+            for value in vars(p).values():
+                self.assertNotIn(".rom", str(value).lower(), f"{p.id}: {value}")
+
+
 class DeleteNeverTouchesADiskImage(unittest.TestCase):
     """A disk image can be hours of installing an operating system. Deleting
     a machine removes the record, the launcher and the saved settings, and
