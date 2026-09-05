@@ -581,3 +581,55 @@ class TheSecondScreenIsOptional(unittest.TestCase):
         for kept in ("Enable dual screen", "Ati Rage 128 ROM:",
                      "Built-in ATI Mach64 GT", "Use built-in ROM", "Select ROM"):
             self.assertIn(kept, src)
+
+
+def _tk_available():
+    try:
+        import tkinter
+        r = tkinter.Tk(); r.withdraw(); r.destroy(); return True
+    except Exception:
+        return False
+
+
+@unittest.skipUnless(_tk_available(), "no display")
+class SavingKeepsEverything(unittest.TestCase):
+    """collect() once lost the drives, network, sound and advanced settings
+    without a single test noticing (2026-09-05). It returns a whole record
+    or this fails."""
+
+    def test_every_part_of_the_record_survives_a_round_trip(self):
+        import tkinter as tk
+        from qemugui.ui_machine import MachineEditor
+        with tempfile.TemporaryDirectory() as d:
+            lib = model.Library(Path(d))
+            m = model.new_machine("Round trip", "macos_8_to_9")
+            m.rom = "rom.bin"
+            m.ata[0] = model.AtaDrive("disk", "/disks/hd.img", "raw")
+            m.ata[2] = model.AtaDrive("cdrom", "/disks/cd.iso", "raw")
+            m.scsi = [model.ScsiDrive(3, "cdrom", "/disks/scsi.iso", "raw", None)]
+            m.floppy = model.Floppy("/disks/fd.img", "raw")
+            m.network = model.Network("user", "00:05:02:12:34:56", "")
+            m.audio = "none"
+            m.governor = model.Governor("mips", 200)
+            m.extra_args = "-serial stdio"
+            m.notes = "keep me"
+            root = tk.Tk(); root.withdraw()
+            try:
+                ed = MachineEditor(root, m, lib, d, on_save=lambda *a: None)
+                ed.withdraw()
+                got = ed.collect()
+            finally:
+                root.destroy()
+        self.assertIsNotNone(got, "collect() returned nothing")
+        self.assertEqual(got.rom, "rom.bin")
+        self.assertEqual(got.ata[0].file, "/disks/hd.img")
+        self.assertEqual(got.ata[2].kind, "cdrom")
+        self.assertEqual([s.id for s in got.scsi], [3])
+        self.assertEqual(got.floppy.file, "/disks/fd.img")
+        self.assertEqual(got.network.mode, "user")          # not its screen label
+        self.assertEqual(got.network.mac, "00:05:02:12:34:56")
+        self.assertEqual(got.audio, "none")
+        self.assertEqual(got.governor.mode, "mips")
+        self.assertEqual(got.governor.mips, 200)
+        self.assertEqual(got.extra_args, "-serial stdio")
+        self.assertEqual(got.notes, "keep me")

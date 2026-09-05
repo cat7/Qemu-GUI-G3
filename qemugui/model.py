@@ -214,6 +214,25 @@ class Network:
         return NETWORK_MODE_PLATFORM.get(self.mode)
 
 
+NETWORK_MODE_LABELS = {"user": "default (slirp)"}
+
+
+def network_mode_label(mode: str) -> str:
+    return NETWORK_MODE_LABELS.get(mode, mode)
+
+
+def network_mode_by_label(label: str) -> str:
+    for mode, shown in NETWORK_MODE_LABELS.items():
+        if shown == label:
+            return mode
+    return label
+
+
+def network_labels_for_host(platform: str = paths.HOST_PLATFORM,
+                            current: str | None = None) -> list[str]:
+    return [network_mode_label(m) for m in network_modes_for_host(platform, current)]
+
+
 def network_modes_for_host(platform: str = paths.HOST_PLATFORM, current: str | None = None) -> list[str]:
     """Modes the editor offers on *platform*, plus whatever the record holds."""
     host = "win32" if paths.is_windows(platform) else platform

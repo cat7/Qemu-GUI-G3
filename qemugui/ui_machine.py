@@ -446,6 +446,23 @@ class MachineEditor(tk.Toplevel):
             m.second_gpu = SecondGpu("ati-rage128-pro",
                                      self.gpu_addr_var.get().strip(),
                                      self.gpu_rom_var.get().strip() or None)
+        m.ata = [row.get_ata() for row in self.ata_rows]
+        m.scsi = [d for d in (row.get_scsi(sid) for sid, row in enumerate(self.scsi_rows)) if d]
+        if self.floppy_mode.get() == "file" and self.floppy_var.get().strip():
+            m.floppy = Floppy(self.floppy_var.get().strip(), "raw")
+        else:
+            m.floppy = None
+        mode = model.network_mode_by_label(self.net_mode.get())
+        ifname = self.ifname_var.get().strip() if mode in model.NETWORK_MODES_WITH_IFNAME else ""
+        m.network = Network(mode, self.mac_var.get().strip(), ifname)
+        try:
+            mips = int(self.mips_var.get())
+        except ValueError:
+            mips = 0
+        m.governor = Governor(self.gov_mode.get(), mips)
+        m.audio = self.audio_var.get()
+        m.extra_args = self.extra_var.get().strip()
+        return m
 
     # ---------------- actions
     def _create_disk(self):
