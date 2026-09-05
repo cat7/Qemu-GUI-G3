@@ -232,10 +232,6 @@ class MachineEditor(tk.Toplevel):
         FilePicker(f, self.rom_var, ROM_TYPES, width=40,
                    fallback=lambda: self.qemu_dir).grid(row=r, column=1, sticky="ew", pady=4)
         r += 1
-        ttk.Label(f, text="My notes:").grid(row=r, column=0, sticky="nw", pady=4)
-        self.notes = tk.Text(f, width=52, height=8, wrap="word")
-        self.notes.grid(row=r, column=1, sticky="nsew", pady=4)
-        f.rowconfigure(r, weight=1)
 
     def _build_display(self):
         f = self._tab("Display")
@@ -417,8 +413,6 @@ class MachineEditor(tk.Toplevel):
         self.ram_var.set(str(m.ram_mb))
         self.rom_var.set(m.rom)
         self.display_var.set(m.display)
-        self.notes.delete("1.0", "end")
-        self.notes.insert("1.0", m.notes)
         self.onboard_mode.set("file" if m.onboard_romfile else "none")
         self.onboard_rom_var.set(m.onboard_romfile or "")
         if m.second_gpu:
@@ -456,7 +450,6 @@ class MachineEditor(tk.Toplevel):
             m.ram_mb = -1
         m.rom = self.rom_var.get().strip()          # empty until it is chosen
         m.display = self.display_var.get()
-        m.notes = self.notes.get("1.0", "end").rstrip("\n")
         m.onboard_romfile = (self.onboard_rom_var.get().strip() or None
                              if self.onboard_mode.get() == "file" else None)
         if not self.gpu_on.get():

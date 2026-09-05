@@ -764,3 +764,54 @@ class TheLabelsTheUserAskedFor(unittest.TestCase):
         self.assertEqual(model.ATA_SLOTS,
                          ("IDE 0 Master", "IDE 0 Slave", "IDE 1 Master (CD)", "IDE 1 Slave"))
         self.assertEqual(model.network_mode_label("user"), "default (slirp)")
+
+
+class NotesLiveInTheMainWindowOnly(unittest.TestCase):
+    def test_the_editor_no_longer_carries_them(self):
+        editor = (ROOT / "qemugui" / "ui_machine.py").read_text()
+        main = (ROOT / "qemugui" / "ui_main.py").read_text()
+        self.assertNotIn("notes", editor)
+        self.assertNotIn("My notes", main)
+        self.assertIn('text="Notes"', main)
+
+
+@unittest.skipUnless(_tk_available(), "no display")
+class TypedNotesAreSaved(unittest.TestCase):
+    """The box is editable now, so what is typed has to reach the record."""
+
+    def _window(self, tmp, name):
+        import tkinter as tk
+        from qemugui.ui_main import MainWindow
+        root = tk.Tk(); root.withdraw()
+        w = types.SimpleNamespace(library=model.Library(Path(tmp)),
+                                  notes_name=name,
+                                  notes=tk.Text(root))
+        w.save_notes = MainWindow.save_notes.__get__(w, types.SimpleNamespace)
+        return root, w
+
+    def test_editing_the_box_reaches_the_record(self):
+        with tempfile.TemporaryDirectory() as d:
+            lib = model.Library(Path(d))
+            lib.ensure()
+            m = model.new_machine("Notes test", "macos_8_to_9")
+            m.notes = "before"
+            lib.save(m)
+            root, w = self._window(d, "Notes test")
+            try:
+                w.notes.insert("1.0", "after the change")
+                w.save_notes()
+            finally:
+                root.destroy()
+            self.assertEqual(lib.load("Notes test").notes, "after the change")
+
+    def test_a_box_that_belongs_to_nothing_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            lib = model.Library(Path(d))
+            lib.ensure()
+            root, w = self._window(d, None)
+            try:
+                w.notes.insert("1.0", "stray text")
+                w.save_notes()
+            finally:
+                root.destroy()
+            self.assertEqual(lib.names(), [])

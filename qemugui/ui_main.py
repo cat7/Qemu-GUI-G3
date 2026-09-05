@@ -102,6 +102,7 @@ class MainWindow(tk.Tk):
         self.title(APP_TITLE)
         self.geometry("1100x680")
         self.minsize(880, 520)
+        self.notes_name: str | None = None
         self._build()
         self.refresh_list(select=settings.last_machine)
         self.after(1000, self._poll)
@@ -159,10 +160,10 @@ class MainWindow(tk.Tk):
         self.command_line.pack(fill="both", expand=True)
         self.command_line.config(state="disabled")
 
-        ttk.Label(right, text="My notes").pack(anchor="w", pady=(8, 0))
+        ttk.Label(right, text="Notes").pack(anchor="w", pady=(8, 0))
         self.notes = tk.Text(right, height=6, wrap="word")
         self.notes.pack(fill="x")
-        self.notes.config(state="disabled")
+        self.notes.bind("<FocusOut>", lambda _e: self.save_notes())
 
     @staticmethod
     def _mono(size: int):
@@ -174,6 +175,35 @@ class MainWindow(tk.Tk):
         widget.delete("1.0", "end")
         widget.insert("1.0", text)
         widget.config(state="disabled")
+
+    def _show_notes(self, name: str | None, text: str):
+        """The notes box is editable, so it has to know whose notes it holds."""
+        self.notes_name = name
+        self.notes.config(state="normal")
+        self.notes.delete("1.0", "end")
+        self.notes.insert("1.0", text)
+        if name is None:
+            self.notes.config(state="disabled")
+
+    def save_notes(self):
+        """Write the box back to its machine, if the user changed it. Called
+        when the box loses focus, before another machine is selected, and at
+        quit, so nothing typed is lost."""
+        name = getattr(self, "notes_name", None)
+        if not name or not self.library.has_record(name):
+            return
+        text = self.notes.get("1.0", "end").rstrip("\n")
+        try:
+            m = self.library.load(name)
+        except (OSError, ValueError, KeyError, TypeError):
+            return
+        if m.notes == text:
+            return
+        m.notes = text
+        try:
+            self.library.save(m)
+        except OSError as e:
+            messagebox.showerror(APP_TITLE, f"The notes for \u201c{name}\u201d could not be saved.\n\n{e}")
 
     # ---------------- list / selection
     def refresh_list(self, select: str | None = None):
@@ -207,6 +237,7 @@ class MainWindow(tk.Tk):
             return None
 
     def on_select(self):
+        self.save_notes()
         name = self.selected_name()
         if name:
             self.settings.last_machine = name
@@ -219,7 +250,7 @@ class MainWindow(tk.Tk):
         m = self.selected_machine()
         if not m:
             self._set_text(self.command_line, "")
-            self._set_text(self.notes, "")
+            self._show_notes(None, "")
             self.run_status.config(text="")
             self.start_button.state(["disabled"])
             return
@@ -230,7 +261,7 @@ class MainWindow(tk.Tk):
         except Exception as e:      # never let one bad record blank the window
             text = f"({e})"
         self._set_text(self.command_line, text)
-        self._set_text(self.notes, m.notes)
+        self._show_notes(m.name, m.notes)
         self._refresh_run_status(m.name)
 
     def _refresh_run_status(self, name: str):
@@ -388,6 +419,7 @@ class MainWindow(tk.Tk):
             pass
 
     def _quit(self):
+        self.save_notes()
         self._save_settings()
         if self.running:
             names = ", ".join(self.running)
