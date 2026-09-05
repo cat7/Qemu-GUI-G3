@@ -745,4 +745,22 @@ class TheDisplayChooserLivesOnTheDisplayTab(unittest.TestCase):
         display = src[src.index("def _build_display"):src.index("def _gpu_changed")]
         self.assertNotIn("display_var", machine)
         self.assertIn("display_var", display)
-        self.assertIn("Only sdl shows two screens simultaneously", display)
+        self.assertIn("Select sdl when enabling dual screen", display)
+
+
+class TheLabelsTheUserAskedFor(unittest.TestCase):
+    """Four of these were lost once to a git checkout during an unrelated
+    test and the commit message claimed otherwise. Guarded now."""
+
+    def test_network_sound_display_and_drive_labels(self):
+        src = (Path(__file__).resolve().parent.parent / "qemugui" / "ui_machine.py").read_text()
+        for wanted in ("Vmnet host interface:", "Card MAC address:", "Sound interface",
+                       "CoreAudio", "Display type", "Select sdl when enabling dual screen",
+                       'text="IDE"'):
+            self.assertIn(wanted, src, wanted)
+        for gone in ('text="Interface:"', 'text="Card address:"',
+                     'text="Default", variable=self.audio_var'):
+            self.assertNotIn(gone, src, gone)
+        self.assertEqual(model.ATA_SLOTS,
+                         ("IDE 0 Master", "IDE 0 Slave", "IDE 1 Master (CD)", "IDE 1 Slave"))
+        self.assertEqual(model.network_mode_label("user"), "default (slirp)")

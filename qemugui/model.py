@@ -39,7 +39,7 @@ ADDR_RE = re.compile(r"^(0x[0-9A-Fa-f]{1,2}|[0-9]{1,2})(\.[0-7])?$")
 #
 # The four positions on the Mac's built-in drive cable (index 0..3), and the
 # numbers on its SCSI chain.
-ATA_SLOTS = ("Drive 1", "Drive 2", "Drive 3", "Drive 4")
+ATA_SLOTS = ("IDE 0 Master", "IDE 0 Slave", "IDE 1 Master (CD)", "IDE 1 Slave")
 ATA_STARTUP_SLOT = 0        # the position the Mac starts up from
 ATA_CD_SLOT = 2             # where a CD is expected
 

@@ -240,41 +240,44 @@ class MachineEditor(tk.Toplevel):
     def _build_display(self):
         f = self._tab("Display")
         f.columnconfigure(1, weight=1)
-        ttk.Label(f, text="Display:").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(f, text="Display type", font=("", 0, "bold")).grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        ttk.Label(f, text="Display:").grid(row=1, column=0, sticky="w", pady=(0, 8))
         self.display_var = tk.StringVar()
         displays = model.DISPLAYS.get("win32" if paths.is_windows() else paths.HOST_PLATFORM,
                                       ("sdl", "gtk"))
         ttk.Combobox(f, textvariable=self.display_var, values=list(displays), state="readonly",
-                     width=10).grid(row=0, column=1, sticky="w", pady=(0, 8))
-        ttk.Label(f, text="(Only sdl shows two screens simultaneously.)",
-                  foreground=GREY).grid(row=0, column=2, sticky="w", padx=6, pady=(0, 8))
+                     width=10).grid(row=1, column=1, sticky="w", pady=(0, 8))
+        ttk.Label(f, text="Select sdl when enabling dual screen",
+                  foreground=GREY).grid(row=1, column=2, sticky="w", padx=6, pady=(0, 8))
+
         ttk.Label(f, text="Built-in ATI Mach64 GT", font=("", 0, "bold")).grid(
-            row=1, column=0, columnspan=3, sticky="w", pady=(0, 4))
+            row=2, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.onboard_mode = tk.StringVar(value="none")
         ttk.Radiobutton(f, text="Use built-in ROM",
                         variable=self.onboard_mode, value="none").grid(
-            row=2, column=0, columnspan=3, sticky="w")
+            row=3, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(f, text="Select ROM", variable=self.onboard_mode,
-                        value="file").grid(row=3, column=0, sticky="w")
+                        value="file").grid(row=4, column=0, sticky="w")
         self.onboard_rom_var = tk.StringVar()
         FilePicker(f, self.onboard_rom_var, ROM_TYPES, width=40,
-                   fallback=lambda: self.qemu_dir).grid(row=3, column=1, columnspan=2,
+                   fallback=lambda: self.qemu_dir).grid(row=4, column=1, columnspan=2,
                                                         sticky="ew", padx=2)
 
-        ttk.Separator(f).grid(row=4, column=0, columnspan=3, sticky="ew", pady=10)
+        ttk.Separator(f).grid(row=5, column=0, columnspan=3, sticky="ew", pady=10)
         self.gpu_on = tk.BooleanVar(value=False)
         ttk.Checkbutton(f, text="Enable dual screen", variable=self.gpu_on,
                         command=self._gpu_changed).grid(
-            row=5, column=0, columnspan=3, sticky="w", pady=(0, 4))
-        ttk.Label(f, text="Ati Rage 128 ROM:").grid(row=6, column=0, sticky="w", pady=(6, 0))
+            row=6, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        ttk.Label(f, text="Ati Rage 128 ROM:").grid(row=7, column=0, sticky="w", pady=(6, 0))
         self.gpu_rom_var = tk.StringVar()
         FilePicker(f, self.gpu_rom_var, ROM_TYPES, width=40,
-                   fallback=lambda: self.qemu_dir).grid(row=6, column=1, columnspan=2,
+                   fallback=lambda: self.qemu_dir).grid(row=7, column=1, columnspan=2,
                                                         sticky="ew", padx=2, pady=(6, 0))
-        ttk.Label(f, text="Slot:").grid(row=7, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(f, text="Slot:").grid(row=8, column=0, sticky="w", pady=(6, 0))
         self.gpu_addr_var = tk.StringVar(value=SecondGpu().addr)
         ttk.Entry(f, textvariable=self.gpu_addr_var, width=8).grid(
-            row=7, column=1, sticky="w", pady=(6, 0))
+            row=8, column=1, sticky="w", pady=(6, 0))
 
     def _gpu_changed(self, _e=None):
         """Enabling the card never chooses its ROM file."""
@@ -285,14 +288,16 @@ class MachineEditor(tk.Toplevel):
         f = self._tab("Drives")
         f.columnconfigure(0, weight=1)
         r = 0
+        ttk.Label(f, text="IDE", font=("", 0, "bold")).grid(
+            row=r, column=0, sticky="w", pady=(0, 4))
+        r += 1
         ata = ttk.Frame(f)
         ata.grid(row=r, column=0, sticky="ew")
         ata.columnconfigure(2, weight=1)
         for c, h in enumerate(("Position", "", "", "Format")):
             ttk.Label(ata, text=h, foreground=GREY).grid(row=0, column=c, sticky="w", padx=4)
         self.ata_rows = [DriveRow(ata, 1 + i,
-                                  model.ata_slot_name(i) + (" (CD)" if i == 2 else ""),
-                                  scsi=False,
+                                  model.ata_slot_name(i), scsi=False,
                                   fallback=self.machine_folder)
                          for i in range(len(model.ATA_SLOTS))]
         r += 1
@@ -350,24 +355,24 @@ class MachineEditor(tk.Toplevel):
         ttk.Label(f, text="Network", font=("", 0, "bold")).grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
         ttk.Label(f, text="Connection:").grid(row=2, column=0, sticky="w")
-        self.net_mode = tk.StringVar(value="user")
+        self.net_mode = tk.StringVar(value=model.network_mode_label("user"))
         self.net_mode_cb = ttk.Combobox(f, textvariable=self.net_mode, state="readonly", width=18,
-                                        values=model.network_modes_for_host())
+                                        values=model.network_labels_for_host())
         self.net_mode_cb.grid(row=2, column=1, sticky="w")
         self.net_mode_cb.bind("<<ComboboxSelected>>", self._net_mode_changed)
-        ttk.Label(f, text="Interface:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(f, text="Vmnet host interface:").grid(row=3, column=0, sticky="w", pady=(6, 0))
         self.ifname_var = tk.StringVar()
         self.ifname_entry = ttk.Entry(f, textvariable=self.ifname_var, width=28)
         self.ifname_entry.grid(row=3, column=1, sticky="w", pady=(6, 0))
-        ttk.Label(f, text="Card address:").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(f, text="Card MAC address:").grid(row=4, column=0, sticky="w", pady=(6, 0))
         self.mac_var = tk.StringVar()
         ttk.Entry(f, textvariable=self.mac_var, width=22).grid(
             row=4, column=1, sticky="w", pady=(6, 0))
         ttk.Separator(f).grid(row=5, column=0, columnspan=3, sticky="ew", pady=10)
-        ttk.Label(f, text="Sound", font=("", 0, "bold")).grid(
+        ttk.Label(f, text="Sound interface", font=("", 0, "bold")).grid(
             row=6, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.audio_var = tk.StringVar(value="default")
-        ttk.Radiobutton(f, text="Default", variable=self.audio_var, value="default").grid(
+        ttk.Radiobutton(f, text="CoreAudio", variable=self.audio_var, value="default").grid(
             row=7, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(f, text="SDL", variable=self.audio_var, value="sdl").grid(
             row=8, column=0, columnspan=3, sticky="w")
@@ -375,7 +380,7 @@ class MachineEditor(tk.Toplevel):
             row=9, column=0, columnspan=3, sticky="w")
 
     def _net_mode_changed(self, _e=None):
-        mode = self.net_mode.get()
+        mode = model.network_mode_by_label(self.net_mode.get())
         if mode in model.NETWORK_MODES_WITH_IFNAME:
             self.ifname_entry.config(state="normal")
             if not self.ifname_var.get():
@@ -430,8 +435,9 @@ class MachineEditor(tk.Toplevel):
             row.set_scsi(m.scsi_by_id(sid))
         self.floppy_mode.set("file" if m.floppy else "none")
         self.floppy_var.set(m.floppy.file if m.floppy else "")
-        self.net_mode_cb.config(values=model.network_modes_for_host(current=m.network.mode))
-        self.net_mode.set(m.network.mode)
+        self.net_mode_cb.config(
+            values=model.network_labels_for_host(current=m.network.mode))
+        self.net_mode.set(model.network_mode_label(m.network.mode))
         self.mac_var.set(m.network.mac)
         self.ifname_var.set(m.network.ifname)
         self._net_mode_changed()

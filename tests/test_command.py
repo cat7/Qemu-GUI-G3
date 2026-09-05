@@ -427,7 +427,7 @@ class Validation(unittest.TestCase):
         errors, warnings = model.validate(m, None, "darwin", check_files=False)
         self.assertEqual(errors, [])
         # one plain statement, naming the position the tab names
-        self.assertEqual(warnings, ["The CD is not in Drive 3."])
+        self.assertEqual(warnings, ["The CD is not in IDE 1 Master (CD)."])
 
     def test_duplicate_scsi_id_is_error(self):
         m = load_fixture("mac-os.json")
@@ -471,7 +471,7 @@ class Validation(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertTrue(any("Unmounted" in w for w in warnings))
         # named the way the tab names it, not "ATA index 0"
-        self.assertTrue(any(w.startswith("Drive 1:") for w in warnings), warnings)
+        self.assertTrue(any(w.startswith("IDE 0 Master:") for w in warnings), warnings)
 
 
 class LibraryOps(unittest.TestCase):
