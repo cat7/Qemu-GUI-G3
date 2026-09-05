@@ -351,12 +351,24 @@ class NothingOnScreenIsAParagraph(unittest.TestCase):
         # the launcher's own header comment is the one two-sentence string left
         self.assertEqual(offenders, [])
 
+    # Short lines that exist to stop a person losing time or data. The user
+    # asked for each one by name; anything not here has to fit in 60 chars.
+    PROTECTIVE = ("Boot order: floppy",)
+
     def test_no_string_is_long_enough_to_be_a_paragraph(self):
         offenders = [f"{f}:{line} {text!r}"
                      for f in self.UI
                      for line, text in self.literals(f)
-                     if len(text) > 60]
+                     if len(text) > 60
+                     and not text.startswith(self.PROTECTIVE)]
         self.assertEqual(offenders, [])
+
+    def test_the_protective_lines_are_still_one_sentence(self):
+        for f in self.UI:
+            for _, text in self.literals(f):
+                if text.startswith(self.PROTECTIVE):
+                    self.assertLess(len(text), 130, text)
+                    self.assertEqual(text.count("."), 1, text)
 
     def test_the_startup_failures_are_one_short_line_each(self):
         """The two messages shown before the window exists: one line each, no

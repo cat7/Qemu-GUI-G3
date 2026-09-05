@@ -439,10 +439,10 @@ class Validation(unittest.TestCase):
         m = load_fixture("mac-os.json")
         m.scsi.append(ScsiDrive(7, "disk", "/y.img"))
         errors, _ = model.validate(m, None, "darwin", check_files=False)
-        self.assertTrue(any("device 7 is the Mac itself" in e for e in errors))
+        self.assertTrue(any("device 7 is the Macintosh" in e for e in errors))
         loaded = Machine.from_dict({"name": "x", "scsi": [{"id": 7, "kind": "disk", "file": "/y.img"}]})
         errors, _ = model.validate(loaded, None, "darwin", check_files=False)
-        self.assertTrue(any("device 7 is the Mac itself" in e for e in errors))
+        self.assertTrue(any("device 7 is the Macintosh" in e for e in errors))
 
     def test_bad_name_and_ram(self):
         m = load_fixture("mac-os.json")

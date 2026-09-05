@@ -56,7 +56,7 @@ def scsi_name(sid: int) -> str:
     return f"Device {sid}"
 
 
-SCSI_SELF_LABEL = "the Mac itself"
+SCSI_SELF_LABEL = "Macintosh"
 
 DRIVE_KINDS = ("disk", "cdrom")
 FORMATS = ("raw", "qcow2")
@@ -472,7 +472,7 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
             errors.append(f"Two SCSI drives are both set to device {s.id}.")
         seen_ids.add(s.id)
         if s.id == SCSI_SELF_ID:
-            errors.append(f"SCSI device {SCSI_SELF_ID} is the Mac itself.")
+            errors.append(f"SCSI device {SCSI_SELF_ID} is the Macintosh.")
         elif s.id not in SCSI_IDS:
             errors.append(f"SCSI device {s.id} does not exist.")
         if s.kind not in DRIVE_KINDS:

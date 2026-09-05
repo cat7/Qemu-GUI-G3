@@ -234,7 +234,7 @@ class MachineEditor(tk.Toplevel):
         ttk.Combobox(f, textvariable=self.display_var, values=list(displays), state="readonly",
                      width=10).grid(row=r, column=1, sticky="w", pady=4)
         r += 1
-        ttk.Label(f, text="ROM:").grid(row=r, column=0, sticky="w", pady=4)
+        ttk.Label(f, text="ROM (required):").grid(row=r, column=0, sticky="w", pady=4)
         self.rom_var = tk.StringVar()
         FilePicker(f, self.rom_var, ROM_TYPES, width=40,
                    fallback=lambda: self.qemu_dir).grid(row=r, column=1, sticky="ew", pady=4)
@@ -289,7 +289,9 @@ class MachineEditor(tk.Toplevel):
         ata.columnconfigure(2, weight=1)
         for c, h in enumerate(("Position", "", "", "Format")):
             ttk.Label(ata, text=h, foreground=GREY).grid(row=0, column=c, sticky="w", padx=4)
-        self.ata_rows = [DriveRow(ata, 1 + i, model.ata_slot_name(i), scsi=False,
+        self.ata_rows = [DriveRow(ata, 1 + i,
+                                  model.ata_slot_name(i) + (" (CD)" if i == 2 else ""),
+                                  scsi=False,
                                   fallback=self.machine_folder)
                          for i in range(len(model.ATA_SLOTS))]
         r += 1
@@ -331,6 +333,11 @@ class MachineEditor(tk.Toplevel):
         self.floppy_var = tk.StringVar()
         FilePicker(fd, self.floppy_var, FLOPPY_TYPES, width=44,
                    fallback=self.machine_folder).grid(row=1, column=1, sticky="ew", padx=2)
+        ttk.Label(scsi,
+                  text="Boot order: floppy (when bootable), SCSI, IDE — unless set "
+                       "in the Startup Disk control panel.",
+                  foreground=GREY, wraplength=640, justify="left").grid(
+            row=self_row + 1, column=0, columnspan=7, sticky="w", pady=(8, 0))
 
     def _build_net_audio(self):
         f = self._tab("Network & sound")
