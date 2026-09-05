@@ -733,3 +733,16 @@ class MakingADiskBeforeSaving(unittest.TestCase):
             first.rom = "rom.bin"
             lib.save(first)
             self.assertTrue(lib.has_record("OSX 10.0"))
+
+
+class TheDisplayChooserLivesOnTheDisplayTab(unittest.TestCase):
+    """It was on the Machine tab, which is not where a person looks for it
+    (user, 2026-09-05)."""
+
+    def test_it_is_built_by_the_display_tab_and_not_the_machine_tab(self):
+        src = (Path(__file__).resolve().parent.parent / "qemugui" / "ui_machine.py").read_text()
+        machine = src[src.index("def _build_machine"):src.index("def _build_display")]
+        display = src[src.index("def _build_display"):src.index("def _gpu_changed")]
+        self.assertNotIn("display_var", machine)
+        self.assertIn("display_var", display)
+        self.assertIn("Only sdl shows two screens simultaneously", display)

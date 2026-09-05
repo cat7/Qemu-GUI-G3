@@ -227,13 +227,6 @@ class MachineEditor(tk.Toplevel):
         ttk.Combobox(f, textvariable=self.ram_var, values=[str(x) for x in model.RAM_CHOICES],
                      width=10).grid(row=r, column=1, sticky="w", pady=4)
         r += 1
-        ttk.Label(f, text="Display:").grid(row=r, column=0, sticky="w", pady=4)
-        self.display_var = tk.StringVar()
-        displays = model.DISPLAYS.get("win32" if paths.is_windows() else paths.HOST_PLATFORM,
-                                      ("sdl", "gtk"))
-        ttk.Combobox(f, textvariable=self.display_var, values=list(displays), state="readonly",
-                     width=10).grid(row=r, column=1, sticky="w", pady=4)
-        r += 1
         ttk.Label(f, text="ROM (required):").grid(row=r, column=0, sticky="w", pady=4)
         self.rom_var = tk.StringVar()
         FilePicker(f, self.rom_var, ROM_TYPES, width=40,
@@ -247,33 +240,41 @@ class MachineEditor(tk.Toplevel):
     def _build_display(self):
         f = self._tab("Display")
         f.columnconfigure(1, weight=1)
+        ttk.Label(f, text="Display:").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        self.display_var = tk.StringVar()
+        displays = model.DISPLAYS.get("win32" if paths.is_windows() else paths.HOST_PLATFORM,
+                                      ("sdl", "gtk"))
+        ttk.Combobox(f, textvariable=self.display_var, values=list(displays), state="readonly",
+                     width=10).grid(row=0, column=1, sticky="w", pady=(0, 8))
+        ttk.Label(f, text="(Only sdl shows two screens simultaneously.)",
+                  foreground=GREY).grid(row=0, column=2, sticky="w", padx=6, pady=(0, 8))
         ttk.Label(f, text="Built-in ATI Mach64 GT", font=("", 0, "bold")).grid(
-            row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
+            row=1, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.onboard_mode = tk.StringVar(value="none")
         ttk.Radiobutton(f, text="Use built-in ROM",
                         variable=self.onboard_mode, value="none").grid(
-            row=1, column=0, columnspan=3, sticky="w")
+            row=2, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(f, text="Select ROM", variable=self.onboard_mode,
-                        value="file").grid(row=2, column=0, sticky="w")
+                        value="file").grid(row=3, column=0, sticky="w")
         self.onboard_rom_var = tk.StringVar()
         FilePicker(f, self.onboard_rom_var, ROM_TYPES, width=40,
-                   fallback=lambda: self.qemu_dir).grid(row=2, column=1, columnspan=2,
+                   fallback=lambda: self.qemu_dir).grid(row=3, column=1, columnspan=2,
                                                         sticky="ew", padx=2)
 
-        ttk.Separator(f).grid(row=3, column=0, columnspan=3, sticky="ew", pady=10)
+        ttk.Separator(f).grid(row=4, column=0, columnspan=3, sticky="ew", pady=10)
         self.gpu_on = tk.BooleanVar(value=False)
         ttk.Checkbutton(f, text="Enable dual screen", variable=self.gpu_on,
                         command=self._gpu_changed).grid(
-            row=4, column=0, columnspan=3, sticky="w", pady=(0, 4))
-        ttk.Label(f, text="Ati Rage 128 ROM:").grid(row=5, column=0, sticky="w", pady=(6, 0))
+            row=5, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        ttk.Label(f, text="Ati Rage 128 ROM:").grid(row=6, column=0, sticky="w", pady=(6, 0))
         self.gpu_rom_var = tk.StringVar()
         FilePicker(f, self.gpu_rom_var, ROM_TYPES, width=40,
-                   fallback=lambda: self.qemu_dir).grid(row=5, column=1, columnspan=2,
+                   fallback=lambda: self.qemu_dir).grid(row=6, column=1, columnspan=2,
                                                         sticky="ew", padx=2, pady=(6, 0))
-        ttk.Label(f, text="Slot:").grid(row=6, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(f, text="Slot:").grid(row=7, column=0, sticky="w", pady=(6, 0))
         self.gpu_addr_var = tk.StringVar(value=SecondGpu().addr)
         ttk.Entry(f, textvariable=self.gpu_addr_var, width=8).grid(
-            row=6, column=1, sticky="w", pady=(6, 0))
+            row=7, column=1, sticky="w", pady=(6, 0))
 
     def _gpu_changed(self, _e=None):
         """Enabling the card never chooses its ROM file."""
