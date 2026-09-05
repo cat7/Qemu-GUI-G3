@@ -645,3 +645,52 @@ class SavingKeepsEverything(unittest.TestCase):
         self.assertEqual(got.governor.mips, 200)
         self.assertEqual(got.extra_args, "-serial stdio")
         self.assertEqual(got.notes, "keep me")
+
+
+@unittest.skipUnless(_tk_available(), "no display")
+class TheCreateDiskButton(unittest.TestCase):
+    """It shells out to qemu-img, so it greys out when that is not beside
+    the emulator, and says why (user, 2026-09-05)."""
+
+    def _editor_state(self, with_qemu_img: bool):
+        import tkinter as tk
+        from qemugui import paths
+        from qemugui.ui_machine import MachineEditor
+        with tempfile.TemporaryDirectory() as d:
+            install = Path(d)
+            (install / paths.qemu_binary_name()).write_text("#!/bin/sh\n")
+            if with_qemu_img:
+                (install / paths.qemu_img_name()).write_text("#!/bin/sh\n")
+            lib = model.Library(install / "Machines")
+            m = model.new_machine("t", "macos_8_to_9")
+            root = tk.Tk(); root.withdraw()
+            old = paths.install_dir
+            paths.install_dir = lambda: install
+            try:
+                ed = MachineEditor(root, m, lib, str(install), on_save=lambda *a: None)
+                ed.withdraw()
+                buttons = [w for w in self._walk(ed)
+                           if w.winfo_class() == "TButton"
+                           and "Create new disk" in str(w.cget("text"))]
+                labels = [str(w.cget("text")) for w in self._walk(ed)
+                          if w.winfo_class() == "TLabel"]
+                return str(buttons[0].cget("state")), labels
+            finally:
+                paths.install_dir = old
+                root.destroy()
+
+    @staticmethod
+    def _walk(w):
+        yield w
+        for c in w.winfo_children():
+            yield from TheCreateDiskButton._walk(c)
+
+    def test_greyed_out_and_labelled_when_qemu_img_is_missing(self):
+        state, labels = self._editor_state(with_qemu_img=False)
+        self.assertEqual(state, "disabled")
+        self.assertTrue(any("not found" in l for l in labels), labels)
+
+    def test_enabled_when_qemu_img_is_there(self):
+        state, labels = self._editor_state(with_qemu_img=True)
+        self.assertEqual(state, "normal")
+        self.assertFalse(any("not found" in l for l in labels), labels)

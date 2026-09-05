@@ -295,8 +295,13 @@ class MachineEditor(tk.Toplevel):
                                   fallback=self.machine_folder)
                          for i in range(len(model.ATA_SLOTS))]
         r += 1
-        ttk.Button(f, text="Create new disk image…", command=self._create_disk).grid(
+        have_img = paths.qemu_img_binary().is_file()
+        ttk.Button(f, text="Create new disk image…", command=self._create_disk,
+                   state=("normal" if have_img else "disabled")).grid(
             row=r, column=0, sticky="w", padx=4, pady=(8, 4))
+        if not have_img:
+            ttk.Label(f, text=f"{paths.qemu_img_name()} not found",
+                      foreground=GREY).grid(row=r, column=1, sticky="w", padx=6)
         r += 1
         ttk.Separator(f).grid(row=r, column=0, sticky="ew", pady=8)
         r += 1
