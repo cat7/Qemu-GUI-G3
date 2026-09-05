@@ -497,7 +497,7 @@ class MachineEditor(tk.Toplevel):
         m = self.collect()
         errors, warnings = model.validate(m, self.qemu_dir,
                                           machine_dir=str(self.machine_folder()))
-        if m.name != self.old_name and self.library.exists(m.name):
+        if m.name != self.old_name and self.library.has_record(m.name):
             errors.append(f"You already have a machine called “{m.name}”.")
         self.msg.config(text="  ".join(errors + warnings)[:300])
         if not show_validation(self, errors, warnings):

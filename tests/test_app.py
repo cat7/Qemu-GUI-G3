@@ -705,3 +705,31 @@ class TheSecondScreenIsOptIn(unittest.TestCase):
         for sysid in [s.id for s in systems.SYSTEMS.values()]:
             m = model.new_machine("t", sysid)
             self.assertIsNone(m.second_gpu, sysid)
+
+
+class MakingADiskBeforeSaving(unittest.TestCase):
+    """Creating a disk image makes the machine's folder so it has somewhere to
+    put the file. Saving afterwards must not call the name taken (user,
+    2026-09-05: "the gui told me I already had a machine by that name")."""
+
+    def test_a_bare_folder_is_not_a_machine(self):
+        with tempfile.TemporaryDirectory() as d:
+            lib = model.Library(Path(d))
+            lib.folder("OSX 10.0").mkdir(parents=True)          # what the disk dialog does
+            (lib.folder("OSX 10.0") / "disk.img").write_bytes(b"\0" * 16)
+            self.assertTrue(lib.exists("OSX 10.0"))
+            self.assertFalse(lib.has_record("OSX 10.0"))        # so saving may go ahead
+            m = model.new_machine("OSX 10.0", "macosx_10_0_to_10_2")
+            m.rom = "rom.bin"
+            lib.save(m)
+            self.assertTrue(lib.has_record("OSX 10.0"))
+            # and the image that was already there is untouched
+            self.assertEqual((lib.folder("OSX 10.0") / "disk.img").read_bytes(), b"\0" * 16)
+
+    def test_a_real_machine_still_blocks_the_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            lib = model.Library(Path(d))
+            first = model.new_machine("OSX 10.0", "macosx_10_0_to_10_2")
+            first.rom = "rom.bin"
+            lib.save(first)
+            self.assertTrue(lib.has_record("OSX 10.0"))

@@ -598,7 +598,14 @@ class Library:
         return self.folder(m.name)
 
     def exists(self, name: str) -> bool:
+        """A folder of that name is there, whatever is in it."""
         return self.folder(name).exists()
+
+    def has_record(self, name: str) -> bool:
+        """A machine of that name is really there. A bare folder is not one:
+        creating a disk image before saving makes the folder first, and that
+        must not read as "you already have a machine called this"."""
+        return self.json_path(name).is_file()
 
     def duplicate(self, name: str, new_name: str) -> Machine:
         """Copy the record (and the Mac's saved settings) into a new folder.
