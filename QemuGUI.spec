@@ -1,13 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for Qemu-GUI. Not run as part of the build here; the user
-# packages with:   pyinstaller --noconfirm QemuGUI.spec
+# PyInstaller spec for Qemu-system-ppc GUI. Not run as part of the build here;
+# the user packages with:   pyinstaller --noconfirm QemuGUI.spec
 # (equivalent to: pyinstaller --onedir --windowed --noconfirm qemu_gui.py)
 #
-# Put the result into the folder that holds qemu-system-ppc: dist/QemuGUI.app
-# on macOS, the contents of dist/QemuGUI/ on Windows. The program works that
-# folder out itself (paths.resolve_install_dir walks up out of the .app), and
-# keeps Machines/ beside the application, never inside the bundle, which is
-# read-only.
+# Put the result into the folder that holds qemu-system-ppc:
+# "dist/Qemu-system-ppc GUI.app" on macOS, the contents of
+# "dist/Qemu-system-ppc GUI/" on Windows. The program works that folder out
+# itself (paths.resolve_install_dir walks up out of the .app), and keeps
+# Machines/ beside the application, never inside the bundle, which is
+# read-only. The spec file keeps its own name; only the program's name
+# changed.
 
 a = Analysis(
     ['qemu_gui.py'],
@@ -29,7 +31,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='QemuGUI',
+    name='Qemu-system-ppc GUI',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -42,11 +44,11 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name='QemuGUI',
+    name='Qemu-system-ppc GUI',
 )
 app = BUNDLE(
     coll,
-    name='QemuGUI.app',
+    name='Qemu-system-ppc GUI.app',
     icon=None,
     bundle_identifier='org.cat7.qemu-gui',
 )
