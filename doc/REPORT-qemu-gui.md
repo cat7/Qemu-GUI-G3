@@ -492,3 +492,62 @@ as the script lives, kills that loop on exit, and uses `sudo -n chown` so
 the tail can never prompt at all. Test
 `test_vmnet_command_has_sudo_prefix_and_chown_tail` extended to assert the
 keep-alive, its teardown, and the ordering; 42 tests pass.
+
+## Rework (2026-09-05): beside the emulator, safe to delete, plain words
+
+User feedback, verbatim: *"the gui still needs a lot of other work too. I do
+not like its logic concerning qemu-system-ppc localisation, preset cd and hd
+paths etc. I also do not like it being able to run outside a folder that
+contains qemu-system-ppc. And where it keeps it records, particularly that it
+deletes HD's when they were created by the gui inside the machine path. I
+would prefer it to run inside a folder with the qemu program. And there are
+lots of texts that might be clear to me or a knowledgable user, but are of no
+use to regular user."*
+
+Five changes, all in this repository.
+
+**1. The program lives beside the emulator.** The configurable QEMU folder is
+gone entirely: the global setting, the per-machine `qemu_dir` override, the
+`/Applications/...` candidate list and the `$PATH` search. One function,
+`paths.resolve_install_dir(frozen=, executable=, source_root=)`, answers
+"which folder am I installed in" for three cases — from source, frozen inside
+a macOS `.app` (walk up out of `Contents/MacOS`), frozen as a plain
+executable — and `install_dir()` is the only caller of it. `machines_dir()`,
+`settings_path()` and `qemu_binary()` all hang off it. A machine record that
+still carries a `qemu_dir` key loads and drops it.
+
+**2. It refuses to run without the emulator, first thing.** `main()` calls
+`paths.startup_problem()` before importing Tk and before any window exists.
+Missing binary → one plain message naming the folder it looked in, exit code
+3. No folder chooser, no degraded mode. Second check (only after that one
+passes): can `Machines/` be created here.
+
+**3. Machines live in `Machines/` beside the program.** `Library()` defaults
+to `paths.machines_dir()`. Settings hold nothing but `last_machine` and live
+in `Machines/settings.json` — never inside a bundle, which is read-only.
+
+**4. Deleting a machine cannot delete a disk image.** `Library.delete()`
+removes only the names in `model.OWNED_FILES` (`machine.json`, `run.command`,
+`run.bat`, `last-run.log`, `nvram.img`, `pram.img`, `.DS_Store`) directly
+inside the machine's own folder; everything else stays, and the folder itself
+is only removed by `rmdir`, which refuses anything non-empty. `shutil.rmtree`
+no longer appears anywhere in the sources. `delete_preview()` feeds the
+confirmation, which lists what will be kept and where before anything
+happens; `report_delete()` says it again afterwards.
+`model.check_new_image_path()` refuses to write over an existing file when
+making a disk. Renaming a machine re-points the record at images that moved
+with the folder. An AST-level test asserts no other code path can call
+`unlink`, `rmdir`, `rmtree` or `remove`.
+
+**5. Preset paths gone, wording rewritten.** No `/Volumes/Macdata` browse
+fallbacks; drive and CD fields start empty; browse opens at what is already
+filled in, else the machine's own folder, else home. Every visible string is
+rewritten for a newcomer: the four drive positions are **Drive 1..4** with a
+quiet second line ("the Mac starts up from this one (IDE bus 0, master —
+index 0)"), SCSI drives are **Device 0..6** with **Device 7** shown as the Mac
+itself, and the tabs are Basics / Screen / Drives / SCSI drives / Floppy /
+Network & sound / Advanced.
+
+67 tests pass. `tests/test_app.py` is new and covers the install-dir cases
+(including a simulated `.app` bundle on disk), the refusal and its ordering,
+and the disk-image promise.

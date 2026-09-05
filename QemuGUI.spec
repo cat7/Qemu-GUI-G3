@@ -2,8 +2,12 @@
 # PyInstaller spec for Qemu-GUI. Not run as part of the build here; the user
 # packages with:   pyinstaller --noconfirm QemuGUI.spec
 # (equivalent to: pyinstaller --onedir --windowed --noconfirm qemu_gui.py)
-# Put the resulting dist/QemuGUI folder next to qemu-system-ppc so the QEMU
-# folder is auto-discovered, or set it under File > Settings.
+#
+# Put the result into the folder that holds qemu-system-ppc: dist/QemuGUI.app
+# on macOS, the contents of dist/QemuGUI/ on Windows. The program works that
+# folder out itself (paths.resolve_install_dir walks up out of the .app), and
+# keeps Machines/ beside the application, never inside the bundle, which is
+# read-only.
 
 a = Analysis(
     ['qemu_gui.py'],

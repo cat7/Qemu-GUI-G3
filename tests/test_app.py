@@ -87,6 +87,52 @@ class InstallDir(unittest.TestCase):
             paths.use_install_dir(None)
 
 
+class FrozenBundle(unittest.TestCase):
+    """The packaged case, simulated on disk: a real .app-shaped folder with a
+    real emulator file beside it, and the program started as if frozen.
+    Proves install_dir() is wired to resolve_install_dir(), that the emulator
+    is found from inside the bundle, and that Machines lands outside it."""
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.install = Path(self.td.name).resolve()
+        exe = self.install / "QemuGUI.app" / "Contents" / "MacOS" / "QemuGUI"
+        exe.parent.mkdir(parents=True)
+        exe.write_text("")
+        binary = self.install / paths.qemu_binary_name()
+        binary.write_text("#!/bin/sh\n")
+        os.chmod(binary, 0o755)
+        self.exe = exe
+        self._frozen = getattr(sys, "frozen", None)
+        self._executable = sys.executable
+        sys.frozen = True
+        sys.executable = str(exe)
+
+    def tearDown(self):
+        sys.executable = self._executable
+        if self._frozen is None:
+            del sys.frozen
+        else:
+            sys.frozen = self._frozen
+        self.td.cleanup()
+
+    def test_a_frozen_bundle_finds_the_emulator_beside_the_bundle(self):
+        self.assertEqual(paths.install_dir(), self.install)
+        self.assertEqual(paths.machines_dir(), self.install / "Machines")
+        self.assertNotIn(".app", str(paths.machines_dir()))
+        self.assertIsNone(paths.startup_problem())
+        self.assertTrue((self.install / "Machines").is_dir())
+        # nothing was written inside the bundle
+        self.assertEqual(sorted(p.name for p in (self.install / "QemuGUI.app").rglob("*")),
+                         ["Contents", "MacOS", "QemuGUI"])
+
+    def test_a_frozen_bundle_without_the_emulator_still_refuses(self):
+        (self.install / paths.qemu_binary_name()).unlink()
+        problem = paths.startup_problem()
+        self.assertIn(str(self.install), problem)
+        self.assertNotIn(".app", problem)      # it names the folder, not the bundle
+
+
 class FakeMainWindow:
     """Stands in for the real window so the test can prove it is never built."""
 

@@ -1,128 +1,175 @@
-# Qemu-GUI -- a portable launcher for the QEMU Beige G3 (`-M g3beige`)
+# Qemu-GUI — run an old Mac
 
-A small tkinter GUI that keeps one folder per emulated machine (Mac OS 9,
-Mac OS X, OS X Server, Linux, ...), each with its own `machine.json`,
-`nvram.img`, `pram.img` and a generated launcher (`run.command` on macOS,
-`run.bat` on Windows), and that can start the machine itself.
+A small window for starting an emulated PowerMac G3: one entry per machine,
+each with its own settings, its own hard disk and CD, and its own copy of
+what the Mac itself remembers.
 
-Standard library only (Python 3.11+ with tkinter). No pip installs.
+Python 3.11+ with tkinter. Nothing to install, no pip packages.
 
-## Run from source
+## Where it goes
 
-macOS (this Mac): Homebrew's `/opt/homebrew/bin/python3` has **no tkinter**.
-Use a python.org build, e.g.
+**Qemu-GUI must sit in the same folder as `qemu-system-ppc`.** That folder is
+the whole configuration: there is nothing to point at and nothing to set.
+
+    /wherever/you/keep/qemu/
+        qemu-system-ppc          <- the emulator
+        qemu-img                 <- comes with it; needed to make a hard disk
+        PowerMacG3v3.ROM         <- the Mac's ROM
+        ati_mach_gt.rom          <- graphics startup files
+        ati_nexus128_103_pci.rom
+        QemuGUI.app              <- this program (or qemu_gui.py from source)
+        Machines/                <- made by the program, one folder per machine
+
+If the emulator is not beside it, Qemu-GUI says so and closes. It does not
+offer to go looking, and it does not half-work.
+
+On Windows the same, with `qemu-system-ppc.exe`, `qemu-img.exe` and
+`QemuGUI.exe`.
+
+## Running it
+
+From source, with a Python that has tkinter (Homebrew's `python3` on macOS
+does **not**):
 
     /Users/hsp/PycharmProjects/QemuGUI-PPC/.venv/bin/python qemu_gui.py
     # or the system one:
     /usr/bin/python3 qemu_gui.py
 
-Windows: install Python 3.11+ from python.org (keep "tcl/tk and IDLE"
-ticked), then
+On Windows, install Python 3.11+ from python.org with "tcl/tk and IDLE"
+ticked, then `py qemu_gui.py`.
 
-    py qemu_gui.py
+There are no command-line options.
 
-Options: `--settings FILE` (use another settings file), `--library DIR`,
-`--qemu-dir DIR` (both override and save the setting).
+## Where your machines are kept
 
-First run: File > Settings, point "QEMU folder" at the folder holding
-`qemu-system-ppc[.exe]`, `qemu-img[.exe]` and the ROMs (`PowerMacG3v3.ROM`,
-`ati_mach_gt.rom`, `ati_nexus128_103_pci.rom`). On this Mac
-`/Applications/qemu-system-ppc-g3-mac-os` is auto-discovered.
+Everything is in `Machines/` next to the program, one folder per machine:
 
-## Where data lives
+| file | what it is |
+|---|---|
+| `machine.json` | how the machine is set up |
+| `run.command` / `run.bat` | the file that starts it, written afresh each time |
+| `nvram.img`, `pram.img` | what the Mac itself remembers: startup disk, date, screen |
+| `last-run.log` | what the emulator printed the last time it ran |
+| anything else | **yours**, and never touched |
 
-| what | macOS | Windows |
+Qemu-GUI starts the emulator with the machine's own folder as the working
+directory, which is what keeps each machine's saved settings separate.
+
+## Deleting a machine never deletes a disk image
+
+A disk image can be hours of installing an operating system, so **Qemu-GUI
+never deletes one, and never writes over one.**
+
+"Delete…" removes exactly four kinds of file: `machine.json`, the launcher,
+`last-run.log`, and the Mac's saved settings. Any other file in the folder —
+a `.img`, a `.qcow2`, an `.iso`, your own notes — is left where it is, and
+the folder itself stays behind to hold them. The confirmation lists what will
+be kept, and where, before you press anything.
+
+"Forget saved settings…" deletes only `nvram.img` and `pram.img`.
+
+"Make a new hard disk…" refuses a name that already exists rather than
+writing over it.
+
+"Make a copy…" copies the settings only. The copy points at the same disk
+image as the original — do not run both at once.
+
+Renaming a machine moves its folder; any image kept inside moves with it and
+the record is re-pointed at the new place.
+
+## The four drive positions
+
+The Mac has room for four drives inside it. Qemu-GUI names them for what
+they are for, with the hardware name underneath:
+
+| shown as | underneath | what QEMU is told |
 |---|---|---|
-| settings (`library_dir`, `qemu_dir`, last machine) | `~/Library/Application Support/Qemu-GUI/settings.json` | `%APPDATA%\Qemu-GUI\settings.json` |
-| machine library (changeable) | `~/Qemu-GUI-Machines/` | `%USERPROFILE%\Qemu-GUI-Machines\` |
+| Drive 1 | the Mac starts up from this one (IDE bus 0, master — index 0) | `index=0` |
+| Drive 2 | room for a second hard disk (IDE bus 0, slave — index 1) | `index=1` |
+| Drive 3 | the usual place for the CD drive (IDE bus 1, master — index 2) | `index=2` |
+| Drive 4 | room for a fourth drive (IDE bus 1, slave — index 3) | `index=3` |
 
-Each machine is `<library>/<name>/` with `machine.json`, `run.command` /
-`run.bat`, `last-run.log`, and after the first boot `nvram.img` (8192 bytes)
-and `pram.img` (256 bytes). QEMU creates those two itself because the GUI
-starts it with the machine folder as the working directory; that is what
-keeps NVRAM/PRAM separate per machine. "Reset NVRAM/PRAM" deletes them.
+Put the CD in Drive 3: the Mac expects a CD drive there and invents an empty
+one if nothing claims the position, which can hide the CD you did put in.
 
-The launcher is regenerated from `machine.json` every time the machine is
-saved or started. Hand edits to it are lost.
+## SCSI
+
+The Mac also has a SCSI chain. Every device on it has its own number so the
+Mac can tell them apart; Qemu-GUI calls them **Device 0** to **Device 6**,
+and shows **Device 7** as the Mac itself, which cannot be given to a drive.
+The number in the name is the SCSI ID.
+
+"Pretend" makes a drive introduce itself as a real make and model
+(`QUANTUM FIREBALL ST4.3S`, `MATSHITA CD-ROM CR-8005`), which some old
+installers insist on.
+
+The Mac prefers a SCSI CD over the CD in Drive 3; holding C at startup picks
+the first CD it finds; the Startup Disk control panel wins over both.
 
 ## Tests
 
-    python -m unittest discover -s tests
+    /Users/hsp/PycharmProjects/QemuGUI-PPC/.venv/bin/python -m unittest discover -s tests
 
-`tests/test_command.py` renders the fixtures in `tests/fixtures/` (the
-user's three real launchers, plus a SCSI-with-identity machine for the
-Windows `.bat` rendering) and compares them against the known-good command
-lines. `qemugui/command.py`, `model.py`, `profiles.py`, `paths.py` import no
-Tk, so the tests run headless.
+`tests/test_command.py` builds the fixtures in `tests/fixtures/` and compares
+them against the real, known-good command lines. `tests/test_app.py` covers
+where the program thinks it is installed, its refusal to start without the
+emulator, and the promise that no code path deletes or overwrites a disk
+image. Both run headless: `command.py`, `model.py`, `profiles.py` and
+`paths.py` import no Tk.
 
 ## Packaging
 
     pyinstaller --noconfirm QemuGUI.spec
 
-(equivalent to `pyinstaller --onedir --windowed --noconfirm qemu_gui.py`).
-Drop the resulting `dist/QemuGUI` folder inside the QEMU folder and the QEMU
-folder is found automatically.
+Put the resulting `dist/QemuGUI.app` (macOS) or the contents of
+`dist/QemuGUI/` (Windows) into the folder that holds the emulator. The
+packaged program works out that folder by walking up out of its own bundle,
+so `Machines/` lands beside the application and never inside it — a bundle
+is read-only.
+
+## Networking
+
+The onboard Ethernet is attached with `-nic ... model=bmac`. Pick the
+connection on the "Network & sound" page; the list shows what works on the
+computer you are on, plus whatever the machine is already set to, so a
+machine set up on the other platform loads and saves unchanged.
+
+| shown as | host | emitted |
+|---|---|---|
+| none | all | `-nic none` |
+| user (the usual choice) | all | `-nic user,model=bmac,mac=<mac>` |
+| vmnet-bridged | macOS | `-nic vmnet-bridged,ifname=<ifname>,model=bmac,mac=<mac>` |
+| vmnet-shared | macOS | `-nic vmnet-shared,model=bmac,mac=<mac>` |
+| vmnet-host | macOS | `-nic vmnet-host,model=bmac,mac=<mac>` |
+| tap | Windows | `-nic tap,ifname=<adapter>,model=bmac,mac=<mac>` |
+
+The `vmnet-*` connections put the Mac on the real network and need an
+administrator password. Start writes the launcher and opens it in Terminal so
+Terminal can ask for the password (Qemu-GUI never sees it); the launcher runs
+the emulator under `sudo`, holds the password ticket open for the whole run
+so it is asked for once only, and hands `nvram.img` and `pram.img` back to
+you at the end:
+
+    sudo chown "${SUDO_USER:-$(id -un)}" nvram.img pram.img 2>/dev/null
+
+On Windows, `tap` needs a TAP-Windows adapter (from OpenVPN) installed
+beforehand, named exactly as it appears in Network Connections.
+
+## Other notes
+
+- Window: `sdl` or `cocoa` on macOS, `sdl` or `gtk` on Windows.
+- Sound plays through `coreaudio` on macOS and `dsound` on Windows; turn it
+  off to boot over Remote Desktop.
+- On Windows the `.bat` quotes any token with a space or a comma, so a SCSI
+  identity comes out as
+  `-device "scsi-hd,drive=shd0,scsi-id=0,vendor=QUANTUM,product=FIREBALL ST4.3S,ver=0F0C"`.
+- Never start the same disk image from two machines at once.
 
 ## Tools
 
-- `tools/smoke_boot.py <scratch-lib> <qemu-dir> <iso>`: scratch-only boot
-  through the GUI's Start path with a QMP quit after 20 s.
-- `tools/screenshots.py <settings.json> <out-dir>`: opens the GUI and
-  captures the main window and the ATA tab (macOS `screencapture`).
-
-## Platform notes
-
-- Display: `sdl` or `cocoa` on macOS, `sdl` or `gtk` on Windows.
-- Audio "platform default" = `coreaudio` on macOS, `dsound` on Windows;
-  "none" boots over Remote Desktop.
-- On Windows the `.bat` quotes any token containing a space or comma, so a
-  SCSI identity comes out as
-  `-device "scsi-hd,drive=shd0,scsi-id=0,vendor=QUANTUM,product=FIREBALL ST4.3S,ver=0F0C"`.
-- Never boot a disk image from two machines at once.
-
-## Networking (Addendum 1)
-
-All modes attach the onboard bmac through `-nic ... model=bmac` (the machine
-only instantiates bmac when such a nic exists). Pick the mode on the
-"Network & Audio" tab; the list shows the modes for the host you are on plus
-whatever the record already holds, so a record made on the other platform
-loads and saves unchanged.
-
-| mode | host | emitted |
-|---|---|---|
-| none | all | `-nic none` |
-| user (default) | all | `-nic user,model=bmac,mac=<mac>` |
-| vmnet-bridged | macOS | `-nic vmnet-bridged,ifname=<ifname>,model=bmac,mac=<mac>` (ifname default `en0`) |
-| vmnet-shared | macOS | `-nic vmnet-shared,model=bmac,mac=<mac>` |
-| vmnet-host | macOS | `-nic vmnet-host,model=bmac,mac=<mac>` |
-| tap | Windows | `-nic tap,ifname=<adapter name>,model=bmac,mac=<mac>` |
-
-**vmnet needs root on macOS.** For any `vmnet-*` mode the generated
-`run.command` runs the binary under sudo and Start does not launch QEMU
-itself: it writes the launcher and runs `open -a Terminal <machine>/run.command`,
-so Terminal asks for your password (the GUI never sees it) and the status
-line says "started in Terminal (sudo required for vmnet)"; there is no pid
-tracking in that case. Files QEMU creates under sudo (`nvram.img`,
-`pram.img`) become root-owned, so the launcher ends with exactly:
-
-    sudo chown "${SUDO_USER:-$(id -un)}" nvram.img pram.img 2>/dev/null
-
-(`$SUDO_USER` if the whole script was run under sudo, otherwise your own
-user; sudo's cached credentials mean no second prompt). The launcher looks like:
-
-    sudo /Applications/qemu-system-ppc-g3-mac-os/qemu-system-ppc \
-    -M g3beige \
-    ...
-    -nic vmnet-bridged,ifname=en0,model=bmac,mac=00:05:02:12:34:56 \
-    ...
-
-    sudo chown "${SUDO_USER:-$(id -un)}" nvram.img pram.img 2>/dev/null
-
-**Windows tap:** the `.bat` gets no sudo. A TAP-Windows adapter (from
-OpenVPN's installer) must exist beforehand and `ifname` must be its name
-exactly as shown in Control Panel > Network Connections (for example
-`TAP-Windows Adapter V9`); run the `.bat` as Administrator if the adapter
-cannot be opened.
-
-SCSI: ids 0..6 are yours; id 7 is the Macintosh itself (the MESH
-controller) and is shown as a fixed row that is never saved.
+- `tools/smoke_boot.py <scratch-dir> <qemu-dir> <iso>` — a real boot through
+  the Start button, into a scratch folder, quit over QMP after 20 s.
+- `tools/screenshots.py <install-dir> <out-dir>` — the main window and the
+  Drives tab.
+- `tools/render_fixture.py <machine.json> [platform] [machine-dir]` — print
+  the launcher a record produces.
