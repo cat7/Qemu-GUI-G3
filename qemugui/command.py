@@ -15,9 +15,7 @@ import shlex
 from . import paths
 from .model import Machine
 
-HEADER_NOTE = ("Written by Qemu-system-ppc GUI. Do not edit: this file is written again "
-               "from scratch every time the machine is saved or started, and your changes "
-               "would be lost. Change the machine in Qemu-system-ppc GUI instead.")
+HEADER_NOTE = "Written by Qemu-system-ppc GUI. Do not edit."
 
 AUDIO_DEFAULT = {"darwin": "coreaudio", "win32": "dsound"}
 
@@ -153,9 +151,6 @@ def group_options(argv: list[str]) -> list[list[str]]:
     return groups
 
 
-SUDO_NOTE = ("# vmnet networking needs root: the binary runs under sudo (Terminal asks for "
-             "the password). Files QEMU creates under sudo are root-owned, so they are "
-             "given back to the user afterwards.")
 # Ask for the password ONCE. Without the keep-alive, sudo's ticket expires
 # during any run longer than its timeout (5 minutes by default) and the chown
 # below prompts a second time, in the middle of the guest's own output.
@@ -173,7 +168,7 @@ def render_shell(argv: list[str], sudo: bool = False) -> str:
              'cd "$(dirname "$0")"',
              ""]
     if sudo:
-        lines += [SUDO_NOTE, SUDO_KEEPALIVE, ""]
+        lines += [SUDO_KEEPALIVE, ""]
     lines.append(("sudo " if sudo else "") + shlex.quote(argv[0]) + " \\")
     groups = group_options(argv)
     for i, g in enumerate(groups):

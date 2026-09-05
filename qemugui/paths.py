@@ -144,31 +144,11 @@ MISSING_QEMU_MESSAGE = """\
 To run this GUI, put it in a folder containing a "{binary}" application.\
 """
 
-UNWRITABLE_MESSAGE = """\
-Qemu-system-ppc GUI cannot create the folder it keeps your machines in.
-
-It tried to make a folder called "{name}" next to itself, in:
-
-{folder}
-
-but it was not allowed to. The reason given was:
-
-{reason}
-
-That folder is probably read-only. Move Qemu-system-ppc GUI and the emulator together
-into a place you can write to, such as your home folder, and open Qemu-system-ppc GUI
-again.
-
-Qemu-system-ppc GUI will now close.\
-"""
+UNWRITABLE_MESSAGE = """The "{name}" folder next to this program could not be created: {reason}"""
 
 
 def startup_problem(platform: str = HOST_PLATFORM) -> str | None:
-    """A plain-language reason the program cannot run where it is, or None.
-
-    Refusing here is deliberate: there is no folder chooser and no degraded
-    mode. Qemu-system-ppc GUI is a front end for the emulator sitting beside it.
-    """
+    """A reason the program cannot run where it is, or None."""
     folder = install_dir()
     if not has_qemu(folder, platform):
         return MISSING_QEMU_MESSAGE.format(binary=qemu_binary_name(platform), folder=f"    {folder}")
@@ -179,8 +159,7 @@ def startup_problem(platform: str = HOST_PLATFORM) -> str | None:
         probe.write_text("", encoding="utf-8")
         probe.unlink()
     except OSError as e:
-        return UNWRITABLE_MESSAGE.format(name=MACHINES_DIR_NAME, folder=f"    {folder}",
-                                         reason=f"    {e}")
+        return UNWRITABLE_MESSAGE.format(name=MACHINES_DIR_NAME, reason=e)
     return None
 
 

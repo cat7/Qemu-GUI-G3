@@ -1,16 +1,11 @@
 """The machine editor: Machine, Display, Drives, Network & sound, Advanced.
 
-The wording rule for this file: say what the setting does for the person, not
-what the hardware calls it. The Machine page carries no explanations at all --
-it is the page of plain settings.
-
 Two rules with teeth:
 
 * **Nothing is ever filled in for you.** Every field that names a file starts
   empty and stays empty until it is chosen, the Mac's own ROM included.
 * A file field is one control: a path can be typed or pasted straight into
-  it, and double-clicking it opens the chooser. No separate label, no
-  separate button beside it.
+  it, and double-clicking it opens the chooser.
 """
 
 from __future__ import annotations
@@ -27,8 +22,8 @@ from .ui_dialogs import show_validation, CreateDiskDialog
 KIND_LABELS = {"": "Empty", "disk": "Hard disk", "cdrom": "CD"}
 KIND_BY_LABEL = {v: k for k, v in KIND_LABELS.items()}
 GPU_NONE = "None"
-GPU_RAGE = "ATI Rage 128 Pro — the one that works"
-GPU_SEPARATOR = "──── untested, likely to fail ────"
+GPU_RAGE = "ATI Rage 128 Pro"
+GPU_SEPARATOR = "────────"
 GPU_CHOICES = [GPU_NONE, GPU_RAGE, GPU_SEPARATOR, *model.SECOND_GPU_EXPERIMENTAL]
 IMAGE_TYPES = [("Hard disks and CDs", "*.img *.dsk *.qcow2 *.iso *.toast *.cdr"),
                ("Every file", "*")]
@@ -38,10 +33,7 @@ CDROM_EXTS = {".iso", ".toast", ".cdr", ".dmg"}
 
 GREY = "gray"
 
-# The settings window is two thirds of the width it used to be (it asked for
-# 1220 pixels before the SCSI and Floppy pages moved into Drives).
 EDITOR_WIDTH = 813
-TEXT_WIDTH = EDITOR_WIDTH - 150         # wrapping width for the paragraphs
 
 
 def browse_file(parent, var: tk.StringVar, filetypes, fallback: Path | str | None = None) -> None:
@@ -53,72 +45,25 @@ def browse_file(parent, var: tk.StringVar, filetypes, fallback: Path | str | Non
 
 class FilePicker:
     """One control for one file: type a path into it, paste one into it, or
-    double-click it to go and find one. Empty until somebody fills it in.
-
-    There is still no separate label and no separate button beside it -- the
-    field is both the chooser and the place the path can be edited by hand.
-    """
-
-    PLACEHOLDER = "Type or paste a path, or double-click to choose a file…"
+    double-click it to go and find one. Empty until somebody fills it in."""
 
     def __init__(self, master, var: tk.StringVar, filetypes, width: int = 40, fallback=None):
         self.var = var
         self.filetypes = filetypes
         self.fallback = fallback
-        self.shown = tk.StringVar()
-        self.placeholder_shown = False
-        self._quiet = False          # our own writes must not reach the record
-        self._focused = False
-        self.entry = ttk.Entry(master, textvariable=self.shown, width=width)
+        self.entry = ttk.Entry(master, textvariable=var, width=width)
         self.entry.bind("<Double-Button-1>", self._browse)
-        self.entry.bind("<FocusIn>", self._focus_in)
-        self.entry.bind("<FocusOut>", self._focus_out)
-        self.shown.trace_add("write", self._typed)
-        self.var.trace_add("write", lambda *_a: self._refresh())
+        var.trace_add("write", lambda *_a: self._refresh())
         self._refresh()
 
     def grid(self, **kw) -> "FilePicker":
         self.entry.grid(**kw)
         return self
 
-    # -------- the grey prompt, which is never part of the value
-    def _show(self, text: str, placeholder: bool) -> None:
-        self._quiet = True
-        self.shown.set(text)
-        self._quiet = False
-        self.placeholder_shown = placeholder
-        self.entry.configure(foreground=GREY if placeholder else "")
-
-    def _typed(self, *_a) -> None:
-        if self._quiet:
-            return
-        self.placeholder_shown = False
-        self.entry.configure(foreground="")
-        if self.shown.get() != self.var.get():
-            self.var.set(self.shown.get())      # what is typed is what is kept
-
     def _refresh(self) -> None:
-        value = self.var.get()
-        if value:
-            if self.shown.get() != value:
-                self._show(value, placeholder=False)
+        if self.var.get():
             # a long path is shown from its end, where the file's name is
             self.entry.xview_moveto(1.0)
-        elif self._focused:
-            if self.placeholder_shown or self.shown.get():
-                self._show("", placeholder=False)
-        else:
-            self._show(self.PLACEHOLDER, placeholder=True)
-
-    def _focus_in(self, _e=None):
-        self._focused = True
-        if self.placeholder_shown:
-            self._show("", placeholder=False)
-
-    def _focus_out(self, _e=None):
-        self._focused = False
-        if not self.var.get():
-            self._show(self.PLACEHOLDER, placeholder=True)
 
     def _browse(self, _e=None):
         fb = self.fallback() if callable(self.fallback) else self.fallback
@@ -213,12 +158,8 @@ class DriveRow:
 
 class MachineEditor(tk.Toplevel):
     """One machine's settings. ``on_save(machine, old_name)`` runs after
-    checking.
-
-    A brand new machine opens the same window with ``is_new``: Name is empty,
-    System is the first of the five, and nothing exists on disk until Save.
-    There is no separate New-machine dialogue any more.
-    """
+    checking. With ``is_new`` the same window opens empty; nothing exists on
+    disk until Save."""
 
     def __init__(self, parent, machine: Machine, library: model.Library, qemu_dir: str, on_save,
                  is_new: bool = False):
@@ -243,7 +184,7 @@ class MachineEditor(tk.Toplevel):
 
         bar = ttk.Frame(self)
         bar.pack(fill="x", padx=6, pady=(0, 6))
-        self.msg = ttk.Label(bar, text="", foreground=GREY, wraplength=TEXT_WIDTH - 160)
+        self.msg = ttk.Label(bar, text="", foreground=GREY, wraplength=EDITOR_WIDTH - 310)
         self.msg.pack(side="left", fill="x", expand=True)
         ttk.Button(bar, text="Cancel", command=self.destroy).pack(side="right", padx=2)
         ttk.Button(bar, text="Save", command=self.save).pack(side="right", padx=2)
@@ -254,16 +195,14 @@ class MachineEditor(tk.Toplevel):
         self.name_entry.focus_set()
 
     def _size_window(self):
-        """Two thirds of the width the window used to ask for, and no taller
-        than the screen it has to fit on."""
+        """No taller than the screen it has to fit on."""
         self.update_idletasks()
         height = min(self.winfo_reqheight(), max(400, self.winfo_screenheight() - 160))
         self.geometry(f"{EDITOR_WIDTH}x{height}")
         self.minsize(640, 400)
 
     def machine_folder(self) -> Path:
-        """Where this machine's own files live. It is named after the
-        machine, so an unnamed one has no folder yet."""
+        """Where this machine's own files live, named after the machine."""
         name = self.name_var.get().strip() or self.old_name
         return self.library.folder(name) if name else self.library.root
 
@@ -273,13 +212,6 @@ class MachineEditor(tk.Toplevel):
         self.nb.add(f, text=title)
         return f
 
-    @staticmethod
-    def _hint(master, text: str, row: int, col: int = 1, span: int = 2,
-              width: int = TEXT_WIDTH - 190):     # a hint sits beside a label column
-        ttk.Label(master, text=text, foreground=GREY, wraplength=width, justify="left").grid(
-            row=row, column=col, columnspan=span, sticky="w", padx=4)
-
-    # -------- the plain settings, no explanations
     def _build_machine(self):
         f = self._tab("Machine")
         f.columnconfigure(1, weight=1)
@@ -319,55 +251,42 @@ class MachineEditor(tk.Toplevel):
     def _build_display(self):
         f = self._tab("Display")
         f.columnconfigure(1, weight=1)
-        ttk.Label(f, text="The graphics built into the Mac",
-                  font=("", 0, "bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 2))
-        ttk.Label(f, text="This Mac always has its own graphics. Mac OS needs a small startup "
-                          "file for the card before it will draw on it.",
-                  foreground=GREY, wraplength=TEXT_WIDTH, justify="left").grid(
-            row=1, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        ttk.Label(f, text="Built-in graphics", font=("", 0, "bold")).grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.onboard_mode = tk.StringVar(value="none")
-        ttk.Radiobutton(f, text="Let the Mac's own ROM handle it",
+        ttk.Radiobutton(f, text="Use the Mac's own ROM",
                         variable=self.onboard_mode, value="none").grid(
-            row=2, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text="Use this card startup file:", variable=self.onboard_mode,
-                        value="file").grid(row=3, column=0, sticky="w")
+            row=1, column=0, columnspan=3, sticky="w")
+        ttk.Radiobutton(f, text="Use this file:", variable=self.onboard_mode,
+                        value="file").grid(row=2, column=0, sticky="w")
         self.onboard_rom_var = tk.StringVar()
         FilePicker(f, self.onboard_rom_var, ROM_TYPES, width=40,
-                   fallback=lambda: self.qemu_dir).grid(row=3, column=1, columnspan=2,
+                   fallback=lambda: self.qemu_dir).grid(row=2, column=1, columnspan=2,
                                                         sticky="ew", padx=2)
-        self._hint(f, "ati_mach_gt.rom for Mac OS, ati_gt_fcode.rom for Linux.", 4)
 
-        ttk.Separator(f).grid(row=5, column=0, columnspan=3, sticky="ew", pady=10)
-        ttk.Label(f, text="An extra graphics card",
-                  font=("", 0, "bold")).grid(row=6, column=0, columnspan=3, sticky="w")
-        ttk.Label(f, text="Mac OS 9 and Mac OS X are much happier with a proper graphics card "
-                          "plugged in, and it is what most people here use.",
-                  foreground=GREY, wraplength=TEXT_WIDTH, justify="left").grid(
-            row=7, column=0, columnspan=3, sticky="w", pady=(0, 6))
-        ttk.Label(f, text="Card:").grid(row=8, column=0, sticky="w")
+        ttk.Separator(f).grid(row=3, column=0, columnspan=3, sticky="ew", pady=10)
+        ttk.Label(f, text="Extra graphics card",
+                  font=("", 0, "bold")).grid(row=4, column=0, columnspan=3, sticky="w",
+                                             pady=(0, 4))
+        ttk.Label(f, text="Card:").grid(row=5, column=0, sticky="w")
         self.gpu_var = tk.StringVar(value=GPU_NONE)
         self._gpu_prev = GPU_NONE
         cb = ttk.Combobox(f, textvariable=self.gpu_var, values=GPU_CHOICES, state="readonly",
                           width=38)
-        cb.grid(row=8, column=1, sticky="w")
+        cb.grid(row=5, column=1, sticky="w")
         cb.bind("<<ComboboxSelected>>", self._gpu_changed)
-        ttk.Label(f, text="Card startup file:").grid(row=9, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(f, text="Card ROM:").grid(row=6, column=0, sticky="w", pady=(6, 0))
         self.gpu_rom_var = tk.StringVar()
         FilePicker(f, self.gpu_rom_var, ROM_TYPES, width=40,
-                   fallback=lambda: self.qemu_dir).grid(row=9, column=1, columnspan=2,
+                   fallback=lambda: self.qemu_dir).grid(row=6, column=1, columnspan=2,
                                                         sticky="ew", padx=2, pady=(6, 0))
-        self._hint(f, "ati_nexus128_103_pci.rom. Without it Mac OS will not put a picture on "
-                      "the card.", 10)
-        ttk.Label(f, text="Which slot:").grid(row=11, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(f, text="Slot:").grid(row=7, column=0, sticky="w", pady=(6, 0))
         self.gpu_addr_var = tk.StringVar(value=SecondGpu().addr)
         ttk.Entry(f, textvariable=self.gpu_addr_var, width=8).grid(
-            row=11, column=1, sticky="w", pady=(6, 0))
-        self._hint(f, "Which of the Mac's expansion slots the card is plugged into. Leave this "
-                      "at 0x0e unless you have a reason.", 12)
+            row=7, column=1, sticky="w", pady=(6, 0))
 
     def _gpu_changed(self, _e=None):
-        """Choosing a card never chooses its ROM file: that is a file, and
-        files are picked by the person."""
+        """Choosing a card never chooses its ROM file."""
         if self.gpu_var.get() == GPU_SEPARATOR:
             self.gpu_var.set(self._gpu_prev)
             return
@@ -375,18 +294,10 @@ class MachineEditor(tk.Toplevel):
         if self.gpu_var.get() != GPU_NONE and not self.gpu_addr_var.get():
             self.gpu_addr_var.set(SecondGpu().addr)
 
-    # -------- every drive this Mac can have: the four inside, the SCSI chain,
-    #          and the floppy drive
     def _build_drives(self):
         f = self._tab("Drives")
         f.columnconfigure(0, weight=1)
         r = 0
-        ttk.Label(f, text="The Mac has room for four drives inside it. Put your hard disk in "
-                          "the first one and your CD in the third: that is what the Mac itself "
-                          "expects, and it starts up from the first one.",
-                  wraplength=TEXT_WIDTH, justify="left").grid(
-            row=r, column=0, sticky="w", padx=4, pady=(0, 6))
-        r += 1
         ata = ttk.Frame(f)
         ata.grid(row=r, column=0, sticky="ew")
         ata.columnconfigure(2, weight=1)
@@ -401,17 +312,8 @@ class MachineEditor(tk.Toplevel):
         r += 1
         ttk.Separator(f).grid(row=r, column=0, sticky="ew", pady=8)
         r += 1
-        ttk.Label(f, text="The SCSI chain", font=("", 0, "bold")).grid(
-            row=r, column=0, sticky="w", padx=4)
-        r += 1
-        ttk.Label(f, text="This Mac also has a SCSI chain — the connector older Macs used for "
-                          "hard disks and CD drives. Every device on it has its own number so "
-                          "the Mac can tell them apart. Numbers 0 to 6 are yours to use; "
-                          "number 7 is the Mac itself. Most people can leave this alone; it is "
-                          "worth using when the system you are installing expects a SCSI CD, "
-                          "as Mac OS 8.1 does.",
-                  wraplength=TEXT_WIDTH, justify="left").grid(
-            row=r, column=0, sticky="w", padx=4, pady=(0, 6))
+        ttk.Label(f, text="SCSI", font=("", 0, "bold")).grid(
+            row=r, column=0, sticky="w", padx=4, pady=(0, 4))
         r += 1
         scsi = ttk.Frame(f)
         scsi.grid(row=r, column=0, sticky="ew")
@@ -424,31 +326,21 @@ class MachineEditor(tk.Toplevel):
         self_row = model.SCSI_SELF_ID + 1
         ttk.Label(scsi, text=model.scsi_name(model.SCSI_SELF_ID)).grid(
             row=self_row, column=0, sticky="w", padx=(0, 4), pady=1)
-        ttk.Label(scsi, text=model.SCSI_SELF_HINT, foreground=GREY,
-                  wraplength=TEXT_WIDTH - 90, justify="left").grid(
+        ttk.Label(scsi, text=model.SCSI_SELF_LABEL, foreground=GREY).grid(
             row=self_row, column=1, columnspan=7, sticky="w", padx=2, pady=1)
-        r += 1
-        ttk.Label(f, text="“Pretend” makes the drive introduce itself to the Mac as a real make "
-                          "and model. Some old installers only accept drives they recognise; if "
-                          "in doubt, leave it off.\n"
-                          "The Mac prefers a SCSI CD over the CD in Drive 3. Holding down the "
-                          "C key while it starts makes it use the first CD it finds, and "
-                          "whatever you chose in the Startup Disk control panel wins over both.",
-                  foreground=GREY, wraplength=TEXT_WIDTH, justify="left").grid(
-            row=r, column=0, sticky="w", padx=4, pady=(8, 2))
         r += 1
         ttk.Separator(f).grid(row=r, column=0, sticky="ew", pady=8)
         r += 1
-        ttk.Label(f, text="The floppy drive", font=("", 0, "bold")).grid(
-            row=r, column=0, sticky="w", padx=4)
+        ttk.Label(f, text="Floppy", font=("", 0, "bold")).grid(
+            row=r, column=0, sticky="w", padx=4, pady=(0, 4))
         r += 1
         fd = ttk.Frame(f)
         fd.grid(row=r, column=0, sticky="ew")
         fd.columnconfigure(1, weight=1)
         self.floppy_mode = tk.StringVar(value="none")
-        ttk.Radiobutton(fd, text="Nothing in the drive", variable=self.floppy_mode,
+        ttk.Radiobutton(fd, text="Empty", variable=self.floppy_mode,
                         value="none").grid(row=0, column=0, columnspan=2, sticky="w", padx=4)
-        ttk.Radiobutton(fd, text="This floppy disk:", variable=self.floppy_mode,
+        ttk.Radiobutton(fd, text="Disk:", variable=self.floppy_mode,
                         value="file").grid(row=1, column=0, sticky="w", padx=4)
         self.floppy_var = tk.StringVar()
         FilePicker(fd, self.floppy_var, FLOPPY_TYPES, width=44,
@@ -457,17 +349,14 @@ class MachineEditor(tk.Toplevel):
     def _build_net_audio(self):
         f = self._tab("Network & sound")
         ttk.Label(f, text="Network", font=("", 0, "bold")).grid(
-            row=0, column=0, columnspan=3, sticky="w")
-        ttk.Label(f, text="How the old Mac reaches the outside world, through the Ethernet "
-                          "socket it was built with.", foreground=GREY, wraplength=TEXT_WIDTH,
-                  justify="left").grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 6))
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
         ttk.Label(f, text="Connection:").grid(row=2, column=0, sticky="w")
         self.net_mode = tk.StringVar(value="user")
         self.net_mode_cb = ttk.Combobox(f, textvariable=self.net_mode, state="readonly", width=18,
                                         values=model.network_modes_for_host())
         self.net_mode_cb.grid(row=2, column=1, sticky="w")
         self.net_mode_cb.bind("<<ComboboxSelected>>", self._net_mode_changed)
-        ttk.Label(f, text="Which connection here:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(f, text="Interface:").grid(row=3, column=0, sticky="w", pady=(6, 0))
         self.ifname_var = tk.StringVar()
         self.ifname_entry = ttk.Entry(f, textvariable=self.ifname_var, width=28)
         self.ifname_entry.grid(row=3, column=1, sticky="w", pady=(6, 0))
@@ -475,57 +364,19 @@ class MachineEditor(tk.Toplevel):
         self.mac_var = tk.StringVar()
         ttk.Entry(f, textvariable=self.mac_var, width=22).grid(
             row=4, column=1, sticky="w", pady=(6, 0))
-        ttk.Label(f, text="The Mac's network card needs a hardware address. Any is fine; only "
-                          "change it if two of your machines are on the network at once.",
-                  foreground=GREY, wraplength=TEXT_WIDTH, justify="left").grid(
-            row=5, column=0, columnspan=3, sticky="w", pady=(2, 0))
-        self.net_hint = ttk.Label(f, text="", foreground=GREY, wraplength=TEXT_WIDTH,
-                                  justify="left")
-        self.net_hint.grid(row=6, column=0, columnspan=3, sticky="w", pady=(6, 0))
-        ttk.Separator(f).grid(row=7, column=0, columnspan=3, sticky="ew", pady=10)
+        ttk.Separator(f).grid(row=5, column=0, columnspan=3, sticky="ew", pady=10)
         ttk.Label(f, text="Sound", font=("", 0, "bold")).grid(
-            row=8, column=0, columnspan=3, sticky="w")
+            row=6, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.audio_var = tk.StringVar(value="default")
-        ttk.Radiobutton(f, text="Play through this computer's speakers",
-                        variable=self.audio_var, value="default").grid(
+        ttk.Radiobutton(f, text="Default", variable=self.audio_var, value="default").grid(
+            row=7, column=0, columnspan=3, sticky="w")
+        ttk.Radiobutton(f, text="SDL", variable=self.audio_var, value="sdl").grid(
+            row=8, column=0, columnspan=3, sticky="w")
+        ttk.Radiobutton(f, text="None", variable=self.audio_var, value="none").grid(
             row=9, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text="Play through SDL, if the usual way misbehaves",
-                        variable=self.audio_var, value="sdl").grid(
-            row=10, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text="No sound at all", variable=self.audio_var, value="none").grid(
-            row=11, column=0, columnspan=3, sticky="w")
-        ttk.Label(f, text="Turn the sound off if you are connecting from another computer over "
-                          "Remote Desktop, where sound can stop the Mac from starting.",
-                  foreground=GREY, wraplength=TEXT_WIDTH, justify="left").grid(
-            row=12, column=0, columnspan=3, sticky="w", pady=(2, 0))
-
-    NET_HINTS = {
-        "none": "The Mac has no network at all, as if the cable were unplugged.",
-        "user": "The Mac can reach the internet through this computer, and nothing on your "
-                "network can see it. This needs no setting up and is the right choice for "
-                "almost everyone.",
-        "vmnet-bridged": "The Mac appears on your home network in its own right, with its own "
-                         "address, so other computers can see it and share files with it. Name "
-                         "the connection this computer uses — usually en0. Macs only, and it "
-                         "asks for your password.",
-        "vmnet-shared": "The Mac shares this computer's network connection and is given an "
-                        "address automatically. Macs only, and it asks for your password.",
-        "vmnet-host": "The Mac can talk to this computer and to nothing else. Macs only, and it "
-                      "asks for your password.",
-        "tap": "The Mac appears on your network through a TAP adapter, which has to be installed "
-               "beforehand (it comes with OpenVPN). Name it exactly as it appears in Network "
-               "Connections. Windows only.",
-    }
-    SUDO_HINT = ("Because this puts the Mac on the real network, it needs an administrator "
-                 "password. Start opens a Terminal window that asks for it; your password is "
-                 "never seen by this program. That window is where the Mac then runs.")
 
     def _net_mode_changed(self, _e=None):
         mode = self.net_mode.get()
-        hint = self.NET_HINTS.get(mode, "")
-        if mode.startswith("vmnet-"):
-            hint += "\n" + self.SUDO_HINT
-        self.net_hint.config(text=hint)
         if mode in model.NETWORK_MODES_WITH_IFNAME:
             self.ifname_entry.config(state="normal")
             if not self.ifname_var.get():
@@ -536,36 +387,24 @@ class MachineEditor(tk.Toplevel):
     def _build_advanced(self):
         f = self._tab("Advanced")
         f.columnconfigure(1, weight=1)
-        ttk.Label(f, text="Nothing on this page needs changing to run an old Mac.",
-                  foreground=GREY, wraplength=TEXT_WIDTH, justify="left").grid(
-            row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
-        ttk.Label(f, text="How fast the Mac pretends to be", font=("", 0, "bold")).grid(
-            row=1, column=0, columnspan=3, sticky="w")
-        ttk.Label(f, text="The emulator keeps the old Mac's clock believable. Leave this alone "
-                          "unless time inside the Mac runs visibly wrong.",
-                  foreground=GREY, wraplength=TEXT_WIDTH, justify="left").grid(
-            row=2, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        ttk.Label(f, text="Speed", font=("", 0, "bold")).grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.gov_mode = tk.StringVar(value="default")
         ttk.Radiobutton(f, text="Normal", variable=self.gov_mode, value="default").grid(
-            row=3, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text="Don't manage it at all", variable=self.gov_mode,
-                        value="off").grid(row=4, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text="Pretend this speed:", variable=self.gov_mode, value="mips").grid(
-            row=5, column=0, sticky="w")
+            row=1, column=0, columnspan=3, sticky="w")
+        ttk.Radiobutton(f, text="Off", variable=self.gov_mode,
+                        value="off").grid(row=2, column=0, columnspan=3, sticky="w")
+        ttk.Radiobutton(f, text="Fixed:", variable=self.gov_mode, value="mips").grid(
+            row=3, column=0, sticky="w")
         self.mips_var = tk.StringVar(value="100")
         ttk.Spinbox(f, textvariable=self.mips_var, from_=1, to=100000, width=8).grid(
-            row=5, column=1, sticky="w")
-        ttk.Separator(f).grid(row=6, column=0, columnspan=3, sticky="ew", pady=10)
-        ttk.Label(f, text="Extra options for the emulator", font=("", 0, "bold")).grid(
-            row=7, column=0, columnspan=3, sticky="w")
+            row=3, column=1, sticky="w")
+        ttk.Separator(f).grid(row=4, column=0, columnspan=3, sticky="ew", pady=10)
+        ttk.Label(f, text="Extra options", font=("", 0, "bold")).grid(
+            row=5, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.extra_var = tk.StringVar()
         ttk.Entry(f, textvariable=self.extra_var, width=70).grid(
-            row=8, column=0, columnspan=3, sticky="ew", pady=(4, 0))
-        ttk.Label(f, text="Added to the end of the command, word for word. For example "
-                          "-global ati-mach64-gt.host-cursor-tracking=off. A mistake here stops "
-                          "the Mac from starting; empty it again if that happens.",
-                  foreground=GREY, wraplength=TEXT_WIDTH, justify="left").grid(
-            row=9, column=0, columnspan=3, sticky="w", pady=(2, 0))
+            row=6, column=0, columnspan=3, sticky="ew")
 
     # ---------------- load / collect
     def load(self, m: Machine):
@@ -646,10 +485,8 @@ class MachineEditor(tk.Toplevel):
     # ---------------- actions
     def _create_disk(self):
         if not self.name_var.get().strip():
-            messagebox.showinfo("New hard disk",
-                                "Give this machine a name on the Machine page first: the "
-                                "disk is made in the machine's own folder, and the folder "
-                                "is named after the machine.", parent=self)
+            messagebox.showinfo("New hard disk", "Give this machine a name first.",
+                                parent=self)
             return
         cur = self.collect()
         dlg = CreateDiskDialog(self, cur, self.machine_folder())
@@ -660,7 +497,7 @@ class MachineEditor(tk.Toplevel):
             self.ata_rows[place[1]].set_ata(AtaDrive("disk", path, fmt))
         elif place and place[0] == "scsi":
             self.scsi_rows[place[1]].set_scsi(ScsiDrive(place[1], "disk", path, fmt, None))
-        self.msg.config(text=f"Made {Path(path).name}. Press Save to keep it.")
+        self.msg.config(text=f"Made {Path(path).name}")
 
     def save(self):
         m = self.collect()

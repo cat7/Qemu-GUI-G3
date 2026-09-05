@@ -37,30 +37,15 @@ ADDR_RE = re.compile(r"^(0x[0-9A-Fa-f]{1,2}|[0-9]{1,2})(\.[0-7])?$")
 
 # ---------------------------------------------------------------- naming
 #
-# The four positions on the Mac's built-in drive cable, and the numbers on
-# its SCSI chain, are named for someone who has never heard of a bus or a
-# master/slave pair. The hardware term is kept alongside for the menus and
-# messages that have room for it.
-#
-# Each entry: (name, what it is for, what the hardware calls it).
-ATA_SLOTS = (
-    ("Drive 1", "the Mac starts up from this one", "IDE bus 0, master — index 0"),
-    ("Drive 2", "room for a second hard disk", "IDE bus 0, slave — index 1"),
-    ("Drive 3", "the usual place for the CD drive", "IDE bus 1, master — index 2"),
-    ("Drive 4", "room for a fourth drive", "IDE bus 1, slave — index 3"),
-)
+# The four positions on the Mac's built-in drive cable (index 0..3), and the
+# numbers on its SCSI chain.
+ATA_SLOTS = ("Drive 1", "Drive 2", "Drive 3", "Drive 4")
 ATA_STARTUP_SLOT = 0        # the position the Mac starts up from
 ATA_CD_SLOT = 2             # where a CD is expected
 
 
 def ata_slot_name(i: int) -> str:
-    return ATA_SLOTS[i][0]
-
-
-def ata_slot_full(i: int) -> str:
-    """One line naming a position unambiguously, for menus and messages."""
-    name, purpose, tech = ATA_SLOTS[i]
-    return f"{name} — {purpose} ({tech})"
+    return ATA_SLOTS[i]
 
 
 SCSI_IDS = list(range(7))          # 7 is the Mac itself
@@ -71,12 +56,7 @@ def scsi_name(sid: int) -> str:
     return f"Device {sid}"
 
 
-def scsi_full(sid: int) -> str:
-    return f"{scsi_name(sid)} (SCSI ID {sid})"
-
-
-SCSI_SELF_HINT = ("the Mac itself — its own SCSI controller answers on this number, "
-                  "so you cannot give it to a drive")
+SCSI_SELF_LABEL = "the Mac itself"
 
 DRIVE_KINDS = ("disk", "cdrom")
 FORMATS = ("raw", "qcow2")
@@ -420,7 +400,7 @@ def start_blockers(m: Machine) -> list[str]:
     saved and come back to another day, but it cannot be run."""
     out = []
     if not (m.rom or "").strip():
-        out.append("This machine has no ROM yet. Choose the Mac's ROM in its settings.")
+        out.append("No ROM chosen.")
     return out
 
 
@@ -434,80 +414,65 @@ def default_identity(kind: str) -> Identity:
 def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFORM,
              check_files: bool = True, machine_dir: str | None = None) -> tuple[list[str], list[str]]:
     """Return (things that must be fixed, things worth knowing). Saving is
-    blocked by the first list, allowed with the second.
-
-    Wording here reaches the person as-is, so it says what to do, not what
-    the internals are called.
-    """
+    blocked by the first list, allowed with the second."""
     errors: list[str] = []
     warnings: list[str] = []
 
-    if not m.name or not NAME_RE.match(m.name) or m.name.strip() != m.name:
-        errors.append("Give this machine a name. Letters, numbers, spaces and the "
-                      "characters . _ - are fine; a name cannot start or end with a space.")
+    if not m.name or not m.name.strip():
+        errors.append("This machine has no name.")
+    elif not NAME_RE.match(m.name) or m.name.strip() != m.name:
+        errors.append("That name will not work.")
     if not (RAM_MIN <= m.ram_mb <= RAM_MAX):
-        errors.append(f"Memory has to be a number between {RAM_MIN} and {RAM_MAX} MB.")
+        errors.append(f"Memory has to be between {RAM_MIN} and {RAM_MAX} MB.")
     elif m.ram_mb > 1024:
-        warnings.append("More than 1024 MB of memory is untested. The real machine could not "
-                        "take more than 768 MB, and old systems can be unhappy with more.")
+        warnings.append("More than 1024 MB is untested.")
     if m.display == "cocoa" and platform != "darwin":
-        warnings.append("The 'cocoa' window only exists on a Mac. Choose 'sdl' or 'gtk' here.")
+        warnings.append("'cocoa' only works on a Mac.")
     net = m.network
     if net.mode not in NETWORK_MODES:
-        errors.append(f"'{net.mode}' is not a network setting Qemu-system-ppc GUI knows.")
+        errors.append(f"'{net.mode}' is not a network setting.")
     else:
         if net.mode != "none" and not MAC_RE.match(net.mac):
-            errors.append("The network card's hardware address has to look like "
-                          "00:05:02:12:34:56 (six pairs of digits and letters a-f).")
+            errors.append("The card address has to look like 00:05:02:12:34:56.")
         if net.mode in NETWORK_MODES_WITH_IFNAME and not net.ifname.strip():
-            errors.append("Say which of this computer's network connections the Mac should "
-                          + ("join (on a Mac that is usually en0)." if net.mode == "vmnet-bridged"
-                             else "use (the name of the TAP adapter in Network Connections)."))
+            errors.append("No interface named.")
         host = "win32" if paths.is_windows(platform) else platform
         if net.platform is not None and net.platform != host:
             warnings.append("This network setting only works on "
-                            f"{'a Mac' if net.platform == 'darwin' else 'Windows'}, so it will "
-                            "not work on this computer.")
+                            f"{'a Mac' if net.platform == 'darwin' else 'Windows'}.")
     if m.governor.mode == "mips" and not (1 <= m.governor.mips <= 100000):
-        errors.append("The speed setting has to be a number between 1 and 100000.")
+        errors.append("The speed has to be between 1 and 100000.")
     if m.second_gpu:
         if m.second_gpu.addr and not ADDR_RE.match(m.second_gpu.addr):
-            errors.append("The extra graphics card's slot has to look like 0x0e.")
+            errors.append("The card slot has to look like 0x0e.")
         if m.second_gpu.device in SECOND_GPU_EXPERIMENTAL:
-            warnings.append("That extra graphics card is untested and probably will not work. "
-                            "The ATI Rage 128 Pro is the one that does.")
+            warnings.append("That graphics card is untested.")
         if m.second_gpu.device == "ati-rage128-pro" and not m.second_gpu.romfile:
-            warnings.append("The extra graphics card has no card ROM, so Mac OS will not be "
-                            "able to put a picture on it.")
+            warnings.append("The extra graphics card has no ROM.")
 
     seen_ids = set()
     for s in m.scsi:
         if s.id in seen_ids:
-            errors.append(f"Two SCSI drives are both set to device {s.id}. Each one needs "
-                          "its own number.")
+            errors.append(f"Two SCSI drives are both set to device {s.id}.")
         seen_ids.add(s.id)
         if s.id == SCSI_SELF_ID:
-            errors.append(f"SCSI device {SCSI_SELF_ID} is the Mac itself, so no drive can use "
-                          "that number. Numbers 0 to 6 are free.")
+            errors.append(f"SCSI device {SCSI_SELF_ID} is the Mac itself.")
         elif s.id not in SCSI_IDS:
-            errors.append(f"SCSI device {s.id} does not exist. Use a number from 0 to 6 "
-                          f"({SCSI_SELF_ID} is the Mac itself).")
+            errors.append(f"SCSI device {s.id} does not exist.")
         if s.kind not in DRIVE_KINDS:
-            errors.append(f"SCSI device {s.id}: choose whether it is a hard disk or a CD.")
+            errors.append(f"SCSI device {s.id} has no drive type.")
     if len(m.ata) != 4:
-        errors.append("There are always exactly four drive positions.")
+        errors.append("There are not four drive positions.")
     cd_in_wrong_place = False
     for i, d in enumerate(m.ata):
         if d is None or not d.file:
             continue            # nothing chosen here: an empty position, quietly ignored
         if d.kind not in DRIVE_KINDS:
-            errors.append(f"{ata_slot_name(i)}: choose whether it is a hard disk or a CD.")
+            errors.append(f"{ata_slot_name(i)} has no drive type.")
         if d.kind == "cdrom" and i != ATA_CD_SLOT:
             cd_in_wrong_place = True
     if cd_in_wrong_place and (m.ata[ATA_CD_SLOT] is None or not m.ata[ATA_CD_SLOT].file):
-        warnings.append(f"Your CD is not in {ata_slot_name(ATA_CD_SLOT)}. The Mac always expects "
-                        f"a CD drive there and will make an empty one, which can hide the CD you "
-                        f"did put in. Move the CD to {ata_slot_name(ATA_CD_SLOT)}.")
+        warnings.append(f"The CD is not in {ata_slot_name(ATA_CD_SLOT)}.")
 
     if check_files:
         qd = qemu_dir or ""
@@ -517,8 +482,8 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
                                ("The extra graphics card's ROM",
                                 m.second_gpu.romfile if m.second_gpu else None)):
                 if rel and not Path(paths.join_path(qd, rel, platform)).is_file():
-                    warnings.append(f"{label} is missing: there is no file "
-                                    f"{paths.join_path(qd, rel, platform)}.")
+                    warnings.append(f"{label} is missing: "
+                                    f"{paths.join_path(qd, rel, platform)}")
         for label, f in _image_files(m):
             if not f:
                 continue
@@ -528,8 +493,7 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
                     continue
                 p = Path(machine_dir) / p
             if not p.is_file():
-                warnings.append(f"{label}: the file {f} is not there. If it lives on a disk or "
-                                "a memory stick, plug it in before starting the machine.")
+                warnings.append(f"{label}: {f} is not there.")
     return errors, warnings
 
 
@@ -594,7 +558,7 @@ class Library:
             try:
                 out.append(self.load(n))
             except (OSError, ValueError, KeyError, TypeError):
-                out.append(Machine(name=n, notes="(this machine's settings file could not be read)"))
+                out.append(Machine(name=n, notes="(unreadable)"))
         return out
 
     def save(self, m: Machine, old_name: str | None = None) -> Path:
@@ -724,14 +688,12 @@ def check_new_image_path(folder: Path | str, name: str, fmt: str) -> tuple[Path 
     if not name:
         return None, "Give the disk a name."
     if "/" in name or "\\" in name or name in (".", ".."):
-        return None, "Use a plain name without any slashes, such as 'Mac OS 9'."
+        return None, "The name cannot contain slashes."
     if not name.lower().endswith(IMAGE_NAME_SUFFIXES):
         name += ".qcow2" if fmt == "qcow2" else ".img"
     target = Path(folder) / name
     if target.exists() or target.is_symlink():
-        return None, (f"There is already a file called {name} in this machine's folder. "
-                      "Qemu-system-ppc GUI will not write over it, in case it is a disk you still "
-                      "need. Choose another name.")
+        return None, f"There is already a file called {name}."
     return target, None
 
 

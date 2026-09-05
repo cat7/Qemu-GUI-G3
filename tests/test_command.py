@@ -377,7 +377,8 @@ class Networking(unittest.TestCase):
         m = load_fixture("mac-os.json")
         m.network = Network("vmnet-bridged", "00:05:02:12:34:56", "")
         errors, _ = model.validate(m, None, "darwin", check_files=False)
-        self.assertTrue(any("network connections" in e for e in errors))
+        # the message says what is wrong, and nothing about how to fix it
+        self.assertEqual(errors, ["No interface named."])
 
 
 class JsonRoundTrip(unittest.TestCase):
@@ -425,8 +426,8 @@ class Validation(unittest.TestCase):
         m.ata[3] = AtaDrive("cdrom", "/x.iso")
         errors, warnings = model.validate(m, None, "darwin", check_files=False)
         self.assertEqual(errors, [])
-        self.assertTrue(any("Move the CD to Drive 3" in w for w in warnings))
-        self.assertTrue(any("Your CD is not in Drive 3" in w for w in warnings))
+        # one plain statement, naming the position the tab names
+        self.assertEqual(warnings, ["The CD is not in Drive 3."])
 
     def test_duplicate_scsi_id_is_error(self):
         m = load_fixture("mac-os.json")
@@ -599,7 +600,7 @@ class NothingIsChosenForYou(unittest.TestCase):
         self.assertEqual(errors, [])                       # Save is not blocked
         blockers = model.start_blockers(m)
         self.assertEqual(len(blockers), 1)
-        self.assertIn("no ROM", blockers[0])
+        self.assertIn("ROM", blockers[0])
         m.rom = "PowerMacG3v3.ROM"
         self.assertEqual(model.start_blockers(m), [])
 

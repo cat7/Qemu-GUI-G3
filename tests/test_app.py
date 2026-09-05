@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import re
 import os
 import sys
 import tempfile
@@ -306,8 +307,89 @@ class TheWindowSaysWhatTheUserAskedItToSay(unittest.TestCase):
         picker = self.editor[self.editor.index("class FilePicker:"):
                              self.editor.index("class DriveRow:")]
         self.assertNotIn("readonly", picker)            # it was a read-only field
-        self.assertIn("Type or paste a path", picker)
+        # the entry is the record's own variable, so what is typed is what is kept
+        self.assertIn("ttk.Entry(master, textvariable=var, width=width)", picker)
         self.assertIn("<Double-Button-1>", picker)      # browsing is still there
+        # and it carries no grey instructions inside it
+        self.assertNotIn("Type or paste a path", picker)
+        self.assertNotIn("PLACEHOLDER", picker)
+
+
+class NothingOnScreenIsAParagraph(unittest.TestCase):
+    """The rule the user set on 2026-09-05: "Good grief, this GUI is no
+    wikipedia or help file." Nothing on screen explains, teaches, reassures or
+    describes -- only labels, buttons, chooser entries, short status lines, and
+    one short sentence when something actually fails.
+
+    This walks every string literal the interface and the record layer can put
+    in front of a person (docstrings and comments excluded, since they never
+    reach the screen) and holds it to two limits: one sentence, and short.
+    """
+
+    UI = ("qemugui/ui_main.py", "qemugui/ui_machine.py", "qemugui/ui_dialogs.py",
+          "qemugui/model.py", "qemugui/systems.py", "qemu_gui.py")
+    STARTUP = ("qemugui/paths.py",)          # two startup failures, one line each
+    SENTENCE_BREAK = re.compile(r"[.?!]\s+[A-Z(\u201c]")
+
+    def literals(self, relpath: str):
+        """Every string constant in the file that is not a docstring."""
+        tree = ast.parse((ROOT / relpath).read_text())
+        docstrings = {id(n.body[0].value) for n in ast.walk(tree)
+                      if isinstance(n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef,
+                                        ast.ClassDef))
+                      and ast.get_docstring(n, clean=False) is not None}
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                    and id(node) not in docstrings):
+                yield node.lineno, node.value
+
+    def test_no_string_runs_to_a_second_sentence(self):
+        offenders = [f"{f}:{line} {text!r}"
+                     for f in self.UI + self.STARTUP
+                     for line, text in self.literals(f)
+                     if self.SENTENCE_BREAK.search(text) and "\n" not in text]
+        # the launcher's own header comment is the one two-sentence string left
+        self.assertEqual(offenders, [])
+
+    def test_no_string_is_long_enough_to_be_a_paragraph(self):
+        offenders = [f"{f}:{line} {text!r}"
+                     for f in self.UI
+                     for line, text in self.literals(f)
+                     if len(text) > 60]
+        self.assertEqual(offenders, [])
+
+    def test_the_startup_failures_are_one_short_line_each(self):
+        """The two messages shown before the window exists: one line each, no
+        instructions for putting it right."""
+        for text in (paths.MISSING_QEMU_MESSAGE, paths.UNWRITABLE_MESSAGE,
+                     qemu_gui.NO_TKINTER):
+            self.assertLess(len(text), 100, text)
+            self.assertEqual(len(text.strip().splitlines()), 1, text)
+
+    def test_the_grey_explanations_are_gone_by_name(self):
+        """Positive control for the two tests above: these are the exact
+        strings that were on screen before, one per screen that had one."""
+        sources = "\n".join((ROOT / f).read_text() for f in self.UI)
+        for gone in ("Machines are kept in",                 # main window footer
+                     "The Mac has not saved any settings",   # main window, grey
+                     "Type or paste a path",                 # every file field
+                     "This Mac always has its own graphics",  # Display
+                     "much happier with a proper graphics card",
+                     "ati_nexus128_103_pci.rom",             # Display, grey hint
+                     "The Mac has room for four drives",     # Drives, intro
+                     "This Mac also has a SCSI chain",       # Drives, SCSI
+                     "Pretend\u201d makes the drive",           # Drives, footnote
+                     "How the old Mac reaches the outside world",   # Network
+                     "The Mac can reach the internet through",      # NET_HINTS
+                     "never seen by this program",           # SUDO_HINT
+                     "Remote Desktop",                       # Sound
+                     "Nothing on this page needs changing",  # Advanced
+                     "Added to the end of the command",      # Advanced
+                     "In gigabytes",                         # New hard disk
+                     "is a plain disk",                      # New hard disk
+                     "Also worth knowing",                   # save validation
+                     "A disk image is never deleted here"):  # delete confirmation
+            self.assertNotIn(gone, sources, gone)
 
 
 class DeleteNeverTouchesADiskImage(unittest.TestCase):
@@ -433,13 +515,13 @@ class DeleteNeverTouchesADiskImage(unittest.TestCase):
             (folder / "Mac OS 9.img").write_bytes(b"precious")
             target, why = model.check_new_image_path(folder, "Mac OS 9", "raw")
             self.assertIsNone(target)
-            self.assertIn("will not write over it", why)
+            self.assertIn("Mac OS 9.img", why)          # it names the file it will not touch
             target, why = model.check_new_image_path(folder, "Mac OS 9", "qcow2")
             self.assertEqual(target, folder / "Mac OS 9.qcow2")
             self.assertIsNone(why)
             target, why = model.check_new_image_path(folder, "a/b", "raw")
             self.assertIsNone(target)
-            self.assertIn("without any slashes", why)
+            self.assertIn("slashes", why)
             self.assertEqual(digest(folder / "Mac OS 9.img"),
                              hashlib.sha256(b"precious").hexdigest())
 

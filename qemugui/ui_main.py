@@ -1,14 +1,9 @@
 """The main window: the list of machines, the command line Start will run,
 and Start.
 
-``start_machine()`` is the one code path that launches the emulator: it
-writes the launcher file and then runs the argument list directly with the
-machine's own folder as the working directory, so the Mac's saved settings
-(nvram.img, pram.img) land there.
-
-The emulator is always the one sitting beside this program: ``qemu_dir()``
-below is the only place that is decided, and it is decided by
-``paths.install_dir()``.
+``start_machine()`` writes the launcher file and runs the argument list with
+the machine's own folder as the working directory. The emulator is always the
+one beside this program (``qemu_dir()``).
 """
 
 from __future__ import annotations
@@ -23,13 +18,12 @@ from . import command, model, paths
 from .model import Machine, Library
 from .paths import Settings
 from .systems import SYSTEMS, system_ids
-from .ui_dialogs import ask_name, confirm_delete, report_delete, open_folder
+from .ui_dialogs import ask_name, confirm_delete, open_folder
 from .ui_machine import MachineEditor
 
 APP_TITLE = "Qemu-system-ppc GUI"
 
-# The emulator's own output still goes into the machine's folder; the window
-# no longer shows any of it.
+# The emulator's own output goes into the machine's folder.
 LOG_NAME = "last-run.log"
 
 
@@ -67,13 +61,12 @@ class RunningMachine:
         return time.time() - self.started
 
 
-TERMINAL_STATUS = "Started in a Terminal window, which will ask for your password"
+TERMINAL_STATUS = "Started in Terminal"
 
 
 def start_in_terminal(m: Machine, machine_dir: Path) -> Path:
-    """Joining the real network needs an administrator password, and only a
-    Terminal window can ask for one. Write the launcher and let Terminal run
-    it; the password is never seen here, and this run cannot be followed."""
+    """vmnet needs a root password, and only Terminal can ask for one, so
+    this run cannot be followed."""
     machine_dir = Path(machine_dir)
     machine_dir.mkdir(parents=True, exist_ok=True)
     launcher, _argv = command.write_launcher(m, qemu_dir(), str(machine_dir))
@@ -130,7 +123,6 @@ class MainWindow(tk.Tk):
 
         left = ttk.Frame(pane)
         pane.add(left, weight=1)
-        ttk.Label(left, text="Your machines").pack(anchor="w")
         self.tree = ttk.Treeview(left, columns=("machine", "state"), show="headings",
                                  selectmode="browse", height=18)
         self.tree.heading("machine", text="Machine")
@@ -160,11 +152,9 @@ class MainWindow(tk.Tk):
         right = ttk.Frame(pane)
         pane.add(right, weight=3)
         self.run_status = ttk.Label(right, text="", justify="left", font=("", 0, "bold"))
-        self.run_status.pack(anchor="w")
-        self.status = ttk.Label(right, text="", foreground="gray", justify="left")
-        self.status.pack(anchor="w", pady=(2, 6))
+        self.run_status.pack(anchor="w", pady=(0, 6))
 
-        ttk.Label(right, text="Command line constructed:").pack(anchor="w", pady=(8, 0))
+        ttk.Label(right, text="Command line constructed:").pack(anchor="w")
         self.command_line = tk.Text(right, height=14, wrap="none", font=self._mono(11))
         self.command_line.pack(fill="both", expand=True)
         self.command_line.config(state="disabled")
@@ -173,11 +163,6 @@ class MainWindow(tk.Tk):
         self.notes = tk.Text(right, height=6, wrap="word")
         self.notes.pack(fill="x")
         self.notes.config(state="disabled")
-
-        foot = ttk.Label(self, foreground="gray", justify="left",
-                         text=f"Machines are kept in {paths.machines_dir()}\n"
-                              f"Emulator: {paths.qemu_binary()}")
-        foot.pack(anchor="w", padx=8, pady=(0, 6))
 
     @staticmethod
     def _mono(size: int):
@@ -218,8 +203,7 @@ class MainWindow(tk.Tk):
         try:
             return self.library.load(name)
         except (OSError, ValueError, KeyError, TypeError) as e:
-            messagebox.showerror(APP_TITLE, f"The settings for “{name}” could not be "
-                                             f"read, so it cannot be opened.\n\n{e}")
+            messagebox.showerror(APP_TITLE, f"“{name}” could not be read.\n\n{e}")
             return None
 
     def on_select(self):
@@ -230,12 +214,11 @@ class MainWindow(tk.Tk):
         self.refresh_details()
 
     def refresh_details(self):
-        """The right-hand side: how it ran, where it is kept, the command
-        line Start will run, and the notes."""
+        """The right-hand side: how it ran, the command line Start will run,
+        and the notes."""
         m = self.selected_machine()
         if not m:
             self._set_text(self.command_line, "")
-            self.status.config(text="")
             self._set_text(self.notes, "")
             self.run_status.config(text="")
             self.start_button.state(["disabled"])
@@ -245,15 +228,8 @@ class MainWindow(tk.Tk):
         try:
             text = command.launcher_text(m, qemu_dir(), str(folder))
         except Exception as e:      # never let one bad record blank the window
-            text = f"(this machine's settings could not be turned into a command: {e})"
+            text = f"({e})"
         self._set_text(self.command_line, text)
-        saved = self.library.saved_settings_status(m.name)
-        if any(v is not None for v in saved.values()):
-            first = "The Mac has settings of its own saved from an earlier run."
-        else:
-            first = ("The Mac has not saved any settings of its own yet; it will the first "
-                     "time you start it.")
-        self.status.config(text=f"{first}\nKept in {folder}")
         self._set_text(self.notes, m.notes)
         self._refresh_run_status(m.name)
 
@@ -262,18 +238,17 @@ class MainWindow(tk.Tk):
         if not r:
             if name in self.terminal_started:
                 when = time.strftime("%H:%M", time.localtime(self.terminal_started[name]))
-                self.run_status.config(text=f"{TERMINAL_STATUS} (at {when}).")
+                self.run_status.config(text=f"{TERMINAL_STATUS} ({when})")
             else:
-                self.run_status.config(text="Not running.")
+                self.run_status.config(text="Not running")
             return
         if r.exit_code is None:
-            self.run_status.config(text=f"Running now — {self._duration(r.uptime())} so far.")
+            self.run_status.config(text=f"Running — {self._duration(r.uptime())}")
         elif r.exit_code == 0:
-            self.run_status.config(text=f"Stopped, after {self._duration(r.uptime())}.")
+            self.run_status.config(text=f"Stopped after {self._duration(r.uptime())}")
         else:
             self.run_status.config(
-                text=f"Stopped after {self._duration(r.uptime())}. Something went wrong "
-                     f"(code {r.exit_code}); {LOG_NAME} in the machine's folder says what.")
+                text=f"Stopped after {self._duration(r.uptime())} — code {r.exit_code}")
 
     @staticmethod
     def _duration(seconds: float) -> str:
@@ -286,9 +261,8 @@ class MainWindow(tk.Tk):
 
     # ---------------- actions
     def new_machine(self):
-        """No separate dialogue: the settings window opens on the Machine
-        page with an empty Name and the System list, and the machine comes
-        into being when it is saved. Cancel, and nothing has been made."""
+        """Opens the settings window on the Machine page; nothing exists on
+        disk until Save."""
         m = model.new_machine("", system_ids()[0])
         MachineEditor(self, m, self.library, qemu_dir(), self._on_editor_save, is_new=True)
 
@@ -296,12 +270,7 @@ class MainWindow(tk.Tk):
         name = self.selected_name()
         if not name:
             return
-        new_name = ask_name(
-            self, "Duplicate",
-            "Name for the duplicate.\n\nThe copy starts out using the same hard disk and CD files "
-            "as the original: nothing is copied and nothing is duplicated on your disk. Do "
-            "not run both machines at the same time.",
-            f"{name} copy", self.library.names())
+        new_name = ask_name(self, "Duplicate", "Name:", f"{name} copy", self.library.names())
         if not new_name:
             return
         try:
@@ -317,26 +286,20 @@ class MainWindow(tk.Tk):
         if not name:
             return
         if name in self.running and self.running[name].poll() is None:
-            messagebox.showwarning("Delete", f"“{name}” is running. Shut the Mac down "
-                                             "from inside its own window first.")
+            messagebox.showwarning("Delete", f"“{name}” is running.")
             return
         will_go, will_stay = self.library.delete_preview(name)
         if not confirm_delete(self, name, will_go, will_stay, self.library.folder(name)):
             return
-        result = self.library.delete(name)
+        self.library.delete(name)
         self.finished.pop(name, None)
         self.terminal_started.pop(name, None)
         self.refresh_list()
-        report_delete(self, name, result)
 
     def edit_machine(self):
         m = self.selected_machine()
         if not m:
             return
-        if m.name in self.running and self.running[m.name].poll() is None:
-            messagebox.showinfo("Edit",
-                                f"“{m.name}” is running. Anything you change now will "
-                                "apply the next time you start it, not straight away.")
         MachineEditor(self, m, self.library, qemu_dir(), self._on_editor_save)
 
     def _on_editor_save(self, m: Machine, old_name: str):
@@ -352,8 +315,7 @@ class MainWindow(tk.Tk):
         try:
             command.write_launcher(m, qemu_dir(), str(self.library.folder(m.name)))
         except OSError as e:
-            messagebox.showerror(APP_TITLE, "The start-up file for this machine could not be "
-                                             f"written.\n\n{e}")
+            messagebox.showerror(APP_TITLE, f"The start-up file could not be written.\n\n{e}")
 
     def open_machine_folder(self):
         name = self.selected_name()
@@ -372,22 +334,17 @@ class MainWindow(tk.Tk):
             return None
         r = self.running.get(m.name)
         if r and r.poll() is None:
-            messagebox.showwarning("Start", f"“{m.name}” is already running. Shut the "
-                                            "Mac down from inside its own window first.")
+            messagebox.showwarning("Start", f"“{m.name}” is already running.")
             return None
         errors, _warnings = model.validate(m, qemu_dir(),
                                            machine_dir=str(self.library.folder(m.name)))
         errors += model.start_blockers(m)
         if errors:
-            messagebox.showerror("Start", "This machine cannot start yet:\n\n" +
-                                 "\n".join(f"• {e}" for e in errors) +
-                                 "\n\nPress “Edit” to put it right.")
+            messagebox.showerror("Start", "\n".join(f"• {e}" for e in errors))
             return None
         if command.needs_sudo(m):
             if paths.HOST_PLATFORM != "darwin":
-                messagebox.showerror("Start", "This machine is set to join the real network the "
-                                              "way only a Mac can. Change its network setting "
-                                              "first.")
+                messagebox.showerror("Start", "This network setting only works on a Mac.")
                 return None
             try:
                 start_in_terminal(m, self.library.folder(m.name))
@@ -401,7 +358,7 @@ class MainWindow(tk.Tk):
         try:
             r = start_machine(m, self.library.folder(m.name))
         except OSError as e:
-            messagebox.showerror("Start", f"The Mac could not be started.\n\n{e}")
+            messagebox.showerror("Start", f"It could not be started.\n\n{e}")
             return None
         self.running[m.name] = r
         self.finished.pop(m.name, None)
@@ -434,10 +391,6 @@ class MainWindow(tk.Tk):
         self._save_settings()
         if self.running:
             names = ", ".join(self.running)
-            if not messagebox.askyesno(
-                    "Quit",
-                    f"These Macs are still running: {names}.\n\nThey keep running if you quit "
-                    "this program; shut them down from inside their own windows to be safe.\n\n"
-                    "Quit anyway?"):
+            if not messagebox.askyesno("Quit", f"Still running: {names} — quit anyway?"):
                 return
         self.destroy()

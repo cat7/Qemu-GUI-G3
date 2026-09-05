@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """Qemu-system-ppc GUI: start an emulated PowerMac G3.
 
-Qemu-system-ppc GUI runs from the folder that holds qemu-system-ppc and keeps its
-machines in a "Machines" folder next to itself. There is nothing to
-configure and nothing to point at.
+Runs from the folder that holds qemu-system-ppc; machines live in a
+"Machines" folder next to it. Standard library only (tkinter).
 
     python qemu_gui.py
-
-Standard library only (tkinter). See README.md.
 """
 
 from __future__ import annotations
@@ -20,19 +17,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from qemugui import paths  # noqa: E402
 
-NO_TKINTER = """\
-Qemu-system-ppc GUI needs Python's tkinter, and this Python does not have it.
-
-On macOS, install Python from python.org (Homebrew's python3 has no tkinter).
-On Windows, re-run the python.org installer and tick "tcl/tk and IDLE".\
-"""
+NO_TKINTER = "This Python has no tkinter."
 
 EXIT_CANNOT_RUN = 3
 EXIT_NO_TKINTER = 2
 
 
 def report_problem_on_screen(message: str) -> None:
-    """Say it in a window if we can, and on the terminal either way."""
+    """Show it in a window if we can, and on the terminal either way."""
     print(message, file=sys.stderr)
     try:
         import tkinter as tk
