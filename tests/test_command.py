@@ -21,7 +21,7 @@ from qemugui.model import Machine, AtaDrive, ScsiDrive, Identity, Floppy, Second
 
 FIXTURES = HERE / "fixtures"
 
-# The folder each fixture's launcher was written for. Qemu-GUI now always
+# The folder each fixture's launcher was written for. The program now always
 # uses the folder it is installed in, so this is no longer part of the
 # record: the tests pass it in the way the application does.
 FIXTURE_QEMU_DIR = {
