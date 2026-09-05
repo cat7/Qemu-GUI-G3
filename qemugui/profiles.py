@@ -21,17 +21,16 @@ class Profile:
     second_gpu: bool                # seed an ATI Rage 128 Pro in slot 0x0e
 
 
+# The five systems the System list offers, in the order it offers them. Each
+# id is its own label written plainly, so a saved record or a fixture says
+# which system it means without a lookup table.
 PROFILES: dict[str, Profile] = {
-    "macos8_9": Profile("macos8_9", "Mac OS 8 or 9", 512, True),
-    "macosx": Profile("macosx", "Mac OS X (10.0 to 10.4)", 512, True),
-    "macosx_server": Profile("macosx_server", "Mac OS X Server 1", 1024, False),
+    "macos_8_to_9": Profile("macos_8_to_9", "Mac OS 8 to 9", 512, True),
+    "macosx_10_0_to_10_2": Profile("macosx_10_0_to_10_2", "Mac OS X 10.0 to 10.2", 512, True),
+    "osx_server_1_2v3": Profile("osx_server_1_2v3", "OSX Server 1.2v3", 1024, False),
     "linux": Profile("linux", "Linux", 256, False),
-    "custom": Profile("custom", "Something else", 512, False),
+    "other": Profile("other", "Other", 512, False),
 }
-
-# Old/alias names accepted when loading machine.json.
-PROFILE_ALIASES = {"macos9": "macos8_9", "macos8": "macos8_9", "osx": "macosx",
-                   "server": "macosx_server"}
 
 DEFAULT_SECOND_GPU_ADDR = "0x0e"
 DEFAULT_MAC = "00:05:02:12:34:56"
@@ -54,11 +53,10 @@ def profile_by_label(label: str) -> Profile:
     for p in PROFILES.values():
         if p.label == label:
             return p
-    return PROFILES["custom"]
+    return PROFILES["other"]
 
 
 def normalise_profile_id(pid: str | None) -> str:
-    if not pid:
-        return "custom"
-    pid = PROFILE_ALIASES.get(pid, pid)
-    return pid if pid in PROFILES else "custom"
+    """A record names one of the five, or it is "Other". Nothing is
+    translated here: there are no older names to translate."""
+    return pid if pid in PROFILES else "other"

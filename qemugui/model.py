@@ -102,7 +102,6 @@ SECOND_GPU_EXPERIMENTAL = ("ati-vga", "VGA", "cirrus-vga")
 # The Mac's own saved settings (startup disk, date and time, screen depth).
 # QEMU writes these two into the machine folder on every run.
 SAVED_SETTINGS_FILES = ("nvram.img", "pram.img")
-MANAGED_FILES = SAVED_SETTINGS_FILES     # old name, still used by the tools
 
 # The complete list of files Qemu-system-ppc GUI is allowed to delete from a machine
 # folder. Anything not on this list -- above all a disk image -- is left
@@ -271,7 +270,7 @@ class Governor:
 @dataclass
 class Machine:
     name: str = "New machine"
-    profile: str = "custom"
+    profile: str = "other"
     machine: str = "g3beige"
     ram_mb: int = 512
     rom: str = ""                # chosen by the person; never guessed
@@ -698,7 +697,6 @@ class Library:
             out[f] = p.stat().st_size if p.is_file() else None
         return out
 
-    managed_status = saved_settings_status      # old name, still used by the tools
 
     def clear_saved_settings(self, name: str) -> list[str]:
         """Delete nvram.img / pram.img -- fixed names, never an image."""
@@ -710,7 +708,6 @@ class Library:
                 removed.append(f)
         return removed
 
-    reset_nvram_pram = clear_saved_settings     # old name, still used by the tools
 
 
 IMAGE_NAME_SUFFIXES = (".img", ".qcow2", ".dsk")

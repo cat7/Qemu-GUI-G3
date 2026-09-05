@@ -390,7 +390,7 @@ class JsonRoundTrip(unittest.TestCase):
             self.assertEqual(json.loads(m.to_json())["schema"], model.SCHEMA)
 
     def test_full_record_round_trip(self):
-        m = Machine(name="Every field", profile="macosx", ram_mb=768, rom="/abs/rom.ROM",
+        m = Machine(name="Every field", profile="macosx_10_0_to_10_2", ram_mb=768, rom="/abs/rom.ROM",
                     display="cocoa", audio="none",
                     onboard_romfile="ati_mach_gt.rom",
                     second_gpu=SecondGpu("ati-rage128-pro", "0x0f", "card.rom"),
@@ -405,9 +405,17 @@ class JsonRoundTrip(unittest.TestCase):
             m.save(p)
             self.assertEqual(Machine.load(p), m)
 
-    def test_legacy_profile_alias(self):
-        m = Machine.from_dict({"name": "x", "profile": "macos9"})
-        self.assertEqual(m.profile, "macos8_9")
+    def test_a_record_names_one_of_the_five_systems(self):
+        """The stored id is the visible entry written plainly. Anything else
+        is not translated -- it is "Other"."""
+        self.assertEqual(profiles.profile_ids(),
+                         ["macos_8_to_9", "macosx_10_0_to_10_2", "osx_server_1_2v3",
+                          "linux", "other"])
+        self.assertEqual([p.label for p in profiles.PROFILES.values()],
+                         ["Mac OS 8 to 9", "Mac OS X 10.0 to 10.2", "OSX Server 1.2v3",
+                          "Linux", "Other"])
+        self.assertEqual(Machine.from_dict({"name": "x", "profile": "macos9"}).profile, "other")
+        self.assertEqual(Machine.from_dict({"name": "x"}).profile, "other")
 
 
 class Validation(unittest.TestCase):
@@ -444,7 +452,7 @@ class Validation(unittest.TestCase):
 
     def test_slot_without_image_is_silently_empty(self):
         # user report 2026-09-03: "warning there is no image at ATA index 1. This is bogus."
-        m = model.new_machine("Fresh", "macos8_9")
+        m = model.new_machine("Fresh", "macos_8_to_9")
         self.assertEqual(m.ata, [None, None, None, None])      # profiles seed no placeholders
         m.ata[1] = model.AtaDrive("disk", "", "raw")           # type chosen, no image
         m.scsi = [model.ScsiDrive(2, "cdrom", "", "raw", None)]
@@ -470,7 +478,7 @@ class LibraryOps(unittest.TestCase):
     def test_create_save_duplicate_delete(self):
         with tempfile.TemporaryDirectory() as td:
             lib = model.Library(td)
-            m = model.new_machine("Mac OS 9", "macos8_9")
+            m = model.new_machine("Mac OS 9", "macos_8_to_9")
             self.assertEqual(m.ram_mb, 512)
             self.assertIsNotNone(m.second_gpu)
             self.assertIsNone(m.onboard_romfile)  # no file is ever chosen for you
@@ -478,12 +486,12 @@ class LibraryOps(unittest.TestCase):
             lib.save(m)
             (lib.folder("Mac OS 9") / "nvram.img").write_bytes(b"\0" * 8192)
             self.assertEqual(lib.names(), ["Mac OS 9"])
-            self.assertEqual(lib.managed_status("Mac OS 9"), {"nvram.img": 8192, "pram.img": None})
+            self.assertEqual(lib.saved_settings_status("Mac OS 9"), {"nvram.img": 8192, "pram.img": None})
             d = lib.duplicate("Mac OS 9", "Mac OS 9 copy")
             self.assertEqual(d.name, "Mac OS 9 copy")
             self.assertTrue((lib.folder("Mac OS 9 copy") / "nvram.img").is_file())
-            self.assertEqual(lib.reset_nvram_pram("Mac OS 9"), ["nvram.img"])
-            self.assertEqual(lib.managed_status("Mac OS 9"), {"nvram.img": None, "pram.img": None})
+            self.assertEqual(lib.clear_saved_settings("Mac OS 9"), ["nvram.img"])
+            self.assertEqual(lib.saved_settings_status("Mac OS 9"), {"nvram.img": None, "pram.img": None})
             # rename via save
             d.name = "Renamed"
             lib.save(d, old_name="Mac OS 9 copy")
@@ -516,7 +524,7 @@ class AtaSlotZero(unittest.TestCase):
     dialog offered only the first *empty* slot, so index 0 was never offered."""
 
     def test_first_unfilled_ata_offers_seeded_index_0(self):
-        m = model.new_machine("t", "macos8_9")
+        m = model.new_machine("t", "macos_8_to_9")
         m.ata[0] = model.AtaDrive("disk", "", "raw")      # a type-only row, as the editor once produced
         self.assertEqual(m.first_empty_ata(), 1)          # the old behaviour, kept for reference
         self.assertEqual(m.first_unfilled_ata(), 0)       # what the dialog must default to
@@ -564,7 +572,7 @@ class NothingIsChosenForYou(unittest.TestCase):
             paths.use_install_dir(here)
             try:
                 self.assertTrue(paths.has_qemu(here, "darwin"))     # a real install folder
-                m = model.new_machine("Fresh", "macos8_9")
+                m = model.new_machine("Fresh", "macos_8_to_9")
                 self.assertEqual(set(model.file_fields(m).values()), {""})
             finally:
                 paths.use_install_dir(None)
@@ -586,7 +594,7 @@ class NothingIsChosenForYou(unittest.TestCase):
 
     def test_a_machine_without_a_rom_saves_but_will_not_start(self):
         """Half-finished is allowed; starting half-finished is not."""
-        m = model.new_machine("Fresh", "macos8_9")
+        m = model.new_machine("Fresh", "macos_8_to_9")
         errors, _warnings = model.validate(m, None, "darwin", check_files=False)
         self.assertEqual(errors, [])                       # Save is not blocked
         blockers = model.start_blockers(m)
@@ -596,7 +604,7 @@ class NothingIsChosenForYou(unittest.TestCase):
         self.assertEqual(model.start_blockers(m), [])
 
     def test_no_rom_means_no_bios_option_rather_than_a_guess(self):
-        m = model.new_machine("Fresh", "macos8_9")
+        m = model.new_machine("Fresh", "macos_8_to_9")
         argv = command.build_argv(m, "/install", "/m", "darwin")
         self.assertNotIn("-bios", argv)
         self.assertFalse(any("/install" in t for t in argv[1:]), argv)
@@ -616,7 +624,7 @@ class DisplayChoice(unittest.TestCase):
     def test_a_new_machine_starts_on_cocoa_on_a_mac(self):
         self.assertEqual(model.Machine().display, "cocoa")
         if paths.HOST_PLATFORM == "darwin":
-            self.assertEqual(model.new_machine("Fresh", "macos8_9").display, "cocoa")
+            self.assertEqual(model.new_machine("Fresh", "macos_8_to_9").display, "cocoa")
 
     def test_the_other_platforms_keep_a_window_that_exists_there(self):
         self.assertEqual(model.default_display("win32"), "sdl")

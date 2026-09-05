@@ -262,7 +262,7 @@ class DeleteNeverTouchesADiskImage(unittest.TestCase):
 
     def machine_with_images(self, root: Path) -> tuple[model.Library, Path, dict]:
         lib = model.Library(root)
-        m = model.new_machine("Mac OS 9", "macos8_9")
+        m = model.new_machine("Mac OS 9", "macos_8_to_9")
         lib.save(m)
         folder = lib.folder("Mac OS 9")
         command.write_launcher(m, "/q", str(folder), "darwin")
@@ -311,7 +311,7 @@ class DeleteNeverTouchesADiskImage(unittest.TestCase):
     def test_folder_goes_away_only_when_nothing_is_left_in_it(self):
         with tempfile.TemporaryDirectory() as td:
             lib = model.Library(Path(td))
-            lib.save(model.new_machine("Empty", "custom"))
+            lib.save(model.new_machine("Empty", "other"))
             folder = lib.folder("Empty")
             (folder / "nvram.img").write_bytes(b"\0" * 8192)
             result = lib.delete("Empty")
@@ -322,7 +322,7 @@ class DeleteNeverTouchesADiskImage(unittest.TestCase):
     def test_an_image_in_a_subfolder_is_kept_too(self):
         with tempfile.TemporaryDirectory() as td:
             lib = model.Library(Path(td))
-            lib.save(model.new_machine("Sub", "custom"))
+            lib.save(model.new_machine("Sub", "other"))
             folder = lib.folder("Sub")
             (folder / "disks").mkdir()
             (folder / "disks" / "big.img").write_bytes(b"x" * 1000)
