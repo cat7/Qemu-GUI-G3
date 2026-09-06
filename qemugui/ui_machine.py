@@ -110,7 +110,19 @@ class DriveRow:
 
     def _kind_changed(self, _e=None):
         k = KIND_BY_LABEL[self.kind.get()]
-        if self.scsi and k and not (self.vendor.get() or self.product.get() or self.ver.get()):
+        if not k:
+            # Choosing "Empty" means it: clear the position, or the file left
+            # behind would be re-read as a drive the moment the record is
+            # saved (_infer_kind runs in get_ata/get_scsi).
+            self.file.set("")
+            self.format.set("raw")
+            if self.scsi:
+                self.send_identity.set(False)
+                self.vendor.set("")
+                self.product.set("")
+                self.ver.set("")
+            return
+        if self.scsi and not (self.vendor.get() or self.product.get() or self.ver.get()):
             ident = model.default_identity(k)
             self.vendor.set(ident.vendor)
             self.product.set(ident.product)

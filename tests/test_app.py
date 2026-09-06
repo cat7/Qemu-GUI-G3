@@ -815,3 +815,55 @@ class TypedNotesAreSaved(unittest.TestCase):
             finally:
                 root.destroy()
             self.assertEqual(lib.names(), [])
+
+
+@unittest.skipUnless(_tk_available(), "no display")
+class ChoosingEmptyRemovesTheDrive(unittest.TestCase):
+    """Setting a SCSI position to Empty and saving used to keep the drive:
+    the file was still in the field, and the save-time inference read it
+    back as a hard disk (2026-09-06)."""
+
+    def _row(self, root, scsi):
+        import tkinter as tk
+        from tkinter import ttk
+        from qemugui.ui_machine import DriveRow
+        return DriveRow(ttk.Frame(root), 0, "x", scsi=scsi)
+
+    def test_scsi_position_set_to_empty_saves_as_nothing(self):
+        import tkinter as tk
+        root = tk.Tk(); root.withdraw()
+        try:
+            row = self._row(root, scsi=True)
+            row.set_scsi(model.ScsiDrive(3, "disk", "/disks/scsi.img", "raw",
+                                         model.Identity("V", "P", "1")))
+            self.assertIsNotNone(row.get_scsi(3))
+            row.kind.set("Empty"); row._kind_changed()
+            self.assertIsNone(row.get_scsi(3))
+            self.assertEqual(row.file.get(), "")
+            self.assertFalse(row.send_identity.get())
+        finally:
+            root.destroy()
+
+    def test_ata_position_set_to_empty_saves_as_nothing(self):
+        import tkinter as tk
+        root = tk.Tk(); root.withdraw()
+        try:
+            row = self._row(root, scsi=False)
+            row.set_ata(model.AtaDrive("cdrom", "/disks/cd.iso", "raw"))
+            self.assertIsNotNone(row.get_ata())
+            row.kind.set("Empty"); row._kind_changed()
+            self.assertIsNone(row.get_ata())
+        finally:
+            root.destroy()
+
+    def test_a_file_chosen_while_empty_is_still_rescued(self):
+        import tkinter as tk
+        root = tk.Tk(); root.withdraw()
+        try:
+            row = self._row(root, scsi=True)
+            row.file.set("/disks/new.iso")          # kind still says Empty
+            d = row.get_scsi(4)
+            self.assertIsNotNone(d)
+            self.assertEqual(d.kind, "cdrom")
+        finally:
+            root.destroy()
