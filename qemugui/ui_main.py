@@ -18,7 +18,8 @@ from . import command, model, paths
 from .model import Machine, Library
 from .paths import Settings
 from .systems import SYSTEMS, system_ids
-from .ui_dialogs import ask_name, confirm_delete, open_folder
+from .ui_dialogs import (ask_name, confirm_delete,
+                         confirm_reset_saved_settings, open_folder)
 from .ui_machine import MachineEditor
 
 APP_TITLE = "Qemu-system-ppc GUI"
@@ -140,7 +141,8 @@ class MainWindow(tk.Tk):
                 ("Duplicate", self.duplicate_machine),
                 ("Edit", self.edit_machine),
                 ("Delete…", self.delete_machine),
-                ("Open machine folder", self.open_machine_folder)]
+                ("Open machine folder", self.open_machine_folder),
+                ("Reset NVRAM + PRAM…", self.reset_saved_settings)]
         for i, (label, cmd) in enumerate(spec):
             ttk.Button(btns, text=label, command=cmd).grid(
                 row=i // 2, column=i % 2, sticky="ew", padx=2, pady=2)
@@ -347,6 +349,42 @@ class MainWindow(tk.Tk):
             command.write_launcher(m, qemu_dir(), str(self.library.folder(m.name)))
         except OSError as e:
             messagebox.showerror(APP_TITLE, f"The start-up file could not be written.\n\n{e}")
+
+    def reset_saved_settings(self):
+        """Throw away what one machine remembers: its nvram.img and pram.img.
+
+        The Mac keeps its start-up disk and the rest of its control panel
+        settings in battery-backed memory, and a spoiled copy is why a
+        machine hangs half way through the chime or comes up to a flashing
+        floppy. Deleting the two files is the emulated equivalent of pulling
+        the battery, and it is needed often enough to belong on a button.
+
+        Nothing else is touched: not the machine's settings here, and never
+        a disk image.
+        """
+        name = self.selected_name()
+        if not name:
+            return
+        if name in self.running and self.running[name].poll() is None:
+            messagebox.showwarning("Reset NVRAM + PRAM", f"“{name}” is running.")
+            return
+
+        status = self.library.saved_settings_status(name)
+        if not any(size is not None for size in status.values()):
+            messagebox.showinfo("Reset NVRAM + PRAM",
+                                f"“{name}” has nothing to reset yet.", parent=self)
+            return
+
+        if not confirm_reset_saved_settings(self, name):
+            return
+
+        try:
+            self.library.clear_saved_settings(name)
+        except OSError as e:
+            messagebox.showerror("Reset NVRAM + PRAM",
+                                 f"“{name}” could not be reset.\n\n{e}")
+            return
+        self.refresh_details()
 
     def open_machine_folder(self):
         name = self.selected_name()

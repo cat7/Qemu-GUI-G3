@@ -284,11 +284,23 @@ class TheWindowSaysWhatTheUserAskedItToSay(unittest.TestCase):
         self.assertIn("stdout=log_fh", self.main)
 
     def test_the_buttons_are_named_the_way_the_user_named_them(self):
-        for wanted in ('"Duplicate"', '"Edit"', '"Open machine folder"'):
+        for wanted in ('"Duplicate"', '"Edit"', '"Open machine folder"',
+                       '"Reset NVRAM + PRAM…"'):
             self.assertIn(wanted, self.main, wanted)
         for gone in ("Make a copy", "Change this machine", "Open its folder",
-                     "Forget saved settings", "clear_saved_settings"):
+                     "Forget saved settings"):
             self.assertNotIn(gone, self.main, gone)
+
+    def test_resetting_what_a_machine_remembers_asks_first_and_says_what_follows(self):
+        """The button deletes files, so it confirms; and the flashing floppy
+        that can follow is explained where the person is deciding."""
+        self.assertIn("def reset_saved_settings", self.main)
+        self.assertIn("clear_saved_settings", self.main)
+        self.assertIn("confirm_reset_saved_settings", self.main)
+        self.assertIn("flashing floppy", self.dialogs)
+        # it must not offer to reset a machine that is running
+        reset = self.main.split("def reset_saved_settings", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn("is running", reset)
 
     def test_there_is_no_new_machine_dialogue_left(self):
         for src in (self.main, self.editor, self.dialogs):
