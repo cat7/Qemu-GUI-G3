@@ -137,18 +137,26 @@ class MainWindow(tk.Tk):
 
         btns = ttk.Frame(left)
         btns.pack(fill="x", pady=(6, 0))
-        spec = [("New machine…", self.new_machine),
-                ("Duplicate", self.duplicate_machine),
-                ("Edit", self.edit_machine),
-                ("Delete…", self.delete_machine),
-                ("Open machine folder", self.open_machine_folder),
-                ("Reset NVRAM + PRAM…", self.reset_saved_settings)]
-        for i, (label, cmd) in enumerate(spec):
-            ttk.Button(btns, text=label, command=cmd).grid(
-                row=i // 2, column=i % 2, sticky="ew", padx=2, pady=2)
+        # Three dots mean another window follows. New machine opens the
+        # settings window; Delete and Reset only ask yes or no, so they get
+        # no dots. The last flag: everything except New machine acts on the
+        # machine highlighted in the list, and is greyed out until one is.
+        spec = [("New machine…", self.new_machine, False),
+                ("Duplicate", self.duplicate_machine, True),
+                ("Edit", self.edit_machine, True),
+                ("Delete", self.delete_machine, True),
+                ("Open machine folder", self.open_machine_folder, True),
+                ("Reset NVRAM + PRAM", self.reset_saved_settings, True)]
+        self.machine_buttons: list[ttk.Button] = []
+        for i, (label, cmd, needs_machine) in enumerate(spec):
+            button = ttk.Button(btns, text=label, command=cmd)
+            button.grid(row=i // 2, column=i % 2, sticky="ew", padx=2, pady=2)
+            if needs_machine:
+                self.machine_buttons.append(button)
         self.start_button = ttk.Button(btns, text="Start this Mac", command=self.start_selected)
         self.start_button.grid(row=(len(spec) + 1) // 2, column=0, columnspan=2, sticky="ew",
                                padx=2, pady=(8, 2))
+        self.machine_buttons.append(self.start_button)
         btns.columnconfigure(0, weight=1)
         btns.columnconfigure(1, weight=1)
 
@@ -250,13 +258,13 @@ class MainWindow(tk.Tk):
         """The right-hand side: how it ran, the command line Start will run,
         and the notes."""
         m = self.selected_machine()
+        for button in self.machine_buttons:
+            button.state(["disabled"] if m is None else ["!disabled"])
         if not m:
             self._set_text(self.command_line, "")
             self._show_notes(None, "")
             self.run_status.config(text="")
-            self.start_button.state(["disabled"])
             return
-        self.start_button.state(["!disabled"])
         folder = self.library.folder(m.name)
         try:
             text = command.launcher_text(m, qemu_dir(), str(folder))

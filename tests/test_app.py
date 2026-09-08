@@ -284,12 +284,31 @@ class TheWindowSaysWhatTheUserAskedItToSay(unittest.TestCase):
         self.assertIn("stdout=log_fh", self.main)
 
     def test_the_buttons_are_named_the_way_the_user_named_them(self):
-        for wanted in ('"Duplicate"', '"Edit"', '"Open machine folder"',
-                       '"Reset NVRAM + PRAM…"'):
+        for wanted in ('"Duplicate"', '"Edit"', '"Delete"', '"Open machine folder"',
+                       '"Reset NVRAM + PRAM"'):
             self.assertIn(wanted, self.main, wanted)
+        # Three dots promise another window. Delete and Reset only ask yes
+        # or no, so they must not make that promise; New machine does open
+        # the settings window, and keeps its dots.
+        for no_dots in ('"Delete…"', '"Reset NVRAM + PRAM…"'):
+            self.assertNotIn(no_dots, self.main, no_dots)
+        self.assertIn('"New machine…"', self.main)
         for gone in ("Make a copy", "Change this machine", "Open its folder",
                      "Forget saved settings"):
             self.assertNotIn(gone, self.main, gone)
+
+    def test_the_buttons_that_need_a_machine_are_dead_until_one_is_chosen(self):
+        """Every button but New machine acts on the highlighted machine, so
+        with nothing highlighted there is nothing for them to do."""
+        self.assertIn("self.machine_buttons", self.main)
+        self.assertIn('button.state(["disabled"] if m is None else ["!disabled"])', self.main)
+        # the one that does not need a machine is not in the group
+        spec = self.main.split("spec = [", 1)[1].split("]", 1)[0]
+        self.assertIn('("New machine…", self.new_machine, False)', spec)
+        for needs in ("self.duplicate_machine", "self.edit_machine", "self.delete_machine",
+                      "self.open_machine_folder", "self.reset_saved_settings"):
+            self.assertIn(f"{needs}, True", spec, needs)
+        self.assertIn("self.machine_buttons.append(self.start_button)", self.main)
 
     def test_resetting_what_a_machine_remembers_asks_first_and_says_what_follows(self):
         """The button deletes files, so it confirms; and the flashing floppy
