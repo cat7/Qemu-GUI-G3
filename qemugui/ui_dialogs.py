@@ -51,14 +51,9 @@ def confirm_delete(parent, name: str, will_go: list[str], will_stay: list[str],
 
 def confirm_reset_saved_settings(parent, name: str) -> bool:
     """Deleting nvram.img and pram.img is pulling the battery on this Mac:
-    it forgets its start-up disk and the rest of what a real one keeps in
-    battery-backed memory. Nothing else goes, and the flashing floppy that
-    can follow is said here, where the person is deciding."""
-    text = f"Throw away what “{name}” remembers?"
-    text += "\n\nDeleted:\n" + _bullets(["nvram.img", "pram.img"])
-    text += "\n\nKept:\n" + _bullets(["the machine, its disks, its settings"])
-    text += "\n\nThe first start after this can show a"
-    text += "\nflashing floppy, until it boots from a CD."
+    it forgets its start-up disk and how the screen was set. It asks first
+    because those are settings a person chose."""
+    text = "You are about to delete boot preferences and video settings for this machine."
     return messagebox.askyesno("Reset NVRAM + PRAM", text, icon="warning",
                                default="no", parent=parent)
 

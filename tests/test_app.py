@@ -284,12 +284,12 @@ class TheWindowSaysWhatTheUserAskedItToSay(unittest.TestCase):
         self.assertIn("stdout=log_fh", self.main)
 
     def test_the_buttons_are_named_the_way_the_user_named_them(self):
-        for wanted in ('"Duplicate"', '"Edit"', '"Delete"', '"Open machine folder"',
+        for wanted in ('"Duplicate"', '"Edit…"', '"Delete"', '"Open machine folder"',
                        '"Reset NVRAM + PRAM"'):
             self.assertIn(wanted, self.main, wanted)
         # Three dots promise another window. Delete and Reset only ask yes
-        # or no, so they must not make that promise; New machine does open
-        # the settings window, and keeps its dots.
+        # or no, so they must not make that promise; New machine and Edit
+        # do open the settings window, and keep their dots.
         for no_dots in ('"Delete…"', '"Reset NVRAM + PRAM…"'):
             self.assertNotIn(no_dots, self.main, no_dots)
         self.assertIn('"New machine…"', self.main)
@@ -316,7 +316,7 @@ class TheWindowSaysWhatTheUserAskedItToSay(unittest.TestCase):
         self.assertIn("def reset_saved_settings", self.main)
         self.assertIn("clear_saved_settings", self.main)
         self.assertIn("confirm_reset_saved_settings", self.main)
-        self.assertIn("flashing floppy", self.dialogs)
+        self.assertIn("You are about to delete", self.dialogs)
         # it must not offer to reset a machine that is running
         reset = self.main.split("def reset_saved_settings", 1)[1].split("\n    def ", 1)[0]
         self.assertIn("is running", reset)
@@ -384,7 +384,7 @@ class NothingOnScreenIsAParagraph(unittest.TestCase):
 
     # Short lines that exist to stop a person losing time or data. The user
     # asked for each one by name; anything not here has to fit in 60 chars.
-    PROTECTIVE = ("Boot order: floppy",)
+    PROTECTIVE = ("Boot order: floppy", "You are about to delete")
 
     def test_no_string_is_long_enough_to_be_a_paragraph(self):
         offenders = [f"{f}:{line} {text!r}"

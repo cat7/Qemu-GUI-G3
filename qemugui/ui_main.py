@@ -137,13 +137,13 @@ class MainWindow(tk.Tk):
 
         btns = ttk.Frame(left)
         btns.pack(fill="x", pady=(6, 0))
-        # Three dots mean another window follows. New machine opens the
-        # settings window; Delete and Reset only ask yes or no, so they get
-        # no dots. The last flag: everything except New machine acts on the
+        # Three dots mean another window follows. New machine and Edit
+        # open the settings window; Delete and Reset only ask yes or no,
+        # so they get no dots. The last flag: everything except New machine acts on the
         # machine highlighted in the list, and is greyed out until one is.
         spec = [("New machine…", self.new_machine, False),
                 ("Duplicate", self.duplicate_machine, True),
-                ("Edit", self.edit_machine, True),
+                ("Edit…", self.edit_machine, True),
                 ("Delete", self.delete_machine, True),
                 ("Open machine folder", self.open_machine_folder, True),
                 ("Reset NVRAM + PRAM", self.reset_saved_settings, True)]
