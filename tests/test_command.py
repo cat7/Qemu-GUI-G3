@@ -555,6 +555,20 @@ class NothingIsChosenForYou(unittest.TestCase):
             if m.second_gpu:
                 self.assertIsNone(m.second_gpu.romfile)
 
+    def test_a_new_machine_starts_with_the_governor_its_system_wants(self):
+        """Classic Mac OS wants the governor in its Normal mode; everything
+        else starts with it off."""
+        self.assertEqual(model.new_machine("Fresh", "macos_8_to_9").governor.mode, "default")
+        for system_id in systems.system_ids():
+            if system_id == "macos_8_to_9":
+                continue
+            m = model.new_machine("Fresh", system_id)
+            self.assertEqual(m.governor.mode, "off", f"{system_id} should start with it off")
+
+    def test_every_system_names_a_real_governor_mode(self):
+        for system_id, system in systems.SYSTEMS.items():
+            self.assertIn(system.governor, model.GOVERNOR_MODES, system_id)
+
     def test_an_empty_record_names_no_files_either(self):
         self.assertEqual(model.Machine().rom, "")
         self.assertIsNone(model.SecondGpu().romfile)

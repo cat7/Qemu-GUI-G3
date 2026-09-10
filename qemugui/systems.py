@@ -19,13 +19,18 @@ class System:
     id: str
     label: str
     ram_mb: int
+    # Which calibration governor a fresh record of this system starts with.
+    # "default" is the Normal mode classic Mac OS wants: its Time Manager
+    # and VIA timers assume a machine of a certain speed. Mac OS X, OSX
+    # Server and Linux do not, and run better with the governor off.
+    governor: str = "off"
 
 
 # The five systems the System list offers, in the order it offers them. Each
 # id is its own label written plainly, so a saved record or a fixture says
 # which system it means without a lookup table.
 SYSTEMS: dict[str, System] = {
-    "macos_8_to_9": System("macos_8_to_9", "Mac OS 8 to 9", 512),
+    "macos_8_to_9": System("macos_8_to_9", "Mac OS 8 to 9", 512, governor="default"),
     "macosx_10_0_to_10_2": System("macosx_10_0_to_10_2", "Mac OS X 10.0 to 10.2", 512),
     "osx_server_1_2v3": System("osx_server_1_2v3", "OSX Server 1.2v3", 1024),
     "linux": System("linux", "Linux", 256),

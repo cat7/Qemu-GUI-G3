@@ -231,8 +231,15 @@ class MachineEditor(tk.Toplevel):
         r += 1
         ttk.Label(f, text="System:").grid(row=r, column=0, sticky="w", pady=4)
         self.system_var = tk.StringVar()
-        ttk.Combobox(f, textvariable=self.system_var, values=system_labels(), state="readonly",
-                     width=26).grid(row=r, column=1, sticky="w", pady=4)
+        system_box = ttk.Combobox(f, textvariable=self.system_var, values=system_labels(),
+                                  state="readonly", width=26)
+        system_box.grid(row=r, column=1, sticky="w", pady=4)
+        # A new record is still being seeded, so picking the system here moves
+        # the governor with it -- new_machine() alone cannot, since the window
+        # always opens on the first system in the list. An existing record is
+        # left alone: its governor is a choice somebody already made, and a
+        # default has no business overwriting it.
+        system_box.bind("<<ComboboxSelected>>", self._system_chosen)
         r += 1
         ttk.Label(f, text="Memory:").grid(row=r, column=0, sticky="w", pady=4)
         self.ram_var = tk.StringVar()
@@ -419,6 +426,12 @@ class MachineEditor(tk.Toplevel):
             row=6, column=0, columnspan=3, sticky="ew")
 
     # ---------------- load / collect
+    def _system_chosen(self, _event=None):
+        """New records only: follow the system's governor default."""
+        if not self.is_new:
+            return
+        self.gov_mode.set(system_by_label(self.system_var.get()).governor)
+
     def load(self, m: Machine):
         self.name_var.set(m.name)
         self.system_var.set(SYSTEMS[m.system].label)

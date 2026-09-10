@@ -386,12 +386,14 @@ class Machine:
 
 
 def new_machine(name: str, system_id: str) -> Machine:
-    """Seed a record from one of the five systems: the memory, and whether the extra
-    graphics card is fitted. Nothing that names a file is filled in -- not a
-    disk, not a CD, not the Mac's ROM, not a graphics ROM -- and the notes
-    start empty. The install folder is never searched for likely files."""
+    """Seed a record from one of the five systems: the memory, the calibration
+    governor, and whether the extra graphics card is fitted. Nothing that names
+    a file is filled in -- not a disk, not a CD, not the Mac's ROM, not a
+    graphics ROM -- and the notes start empty. The install folder is never
+    searched for likely files."""
     p = SYSTEMS[normalise_system_id(system_id)]
     m = Machine(name=name, system=p.id, ram_mb=p.ram_mb, display=default_display())
+    m.governor = Governor(p.governor)
     m.ata = [None, None, None, None]
     return m
 
