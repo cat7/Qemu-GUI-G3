@@ -517,3 +517,20 @@ tail in the `.command` for vmnet-bridged, absence of both in the `.bat`,
 the id-7 validation error, and the cross-platform load/save round trip.
 No smoke boot is needed for this addendum (vmnet would need sudo);
 re-run the existing test suite and the fixture renders.
+
+## Addendum 2: VNC display option
+
+Ported from the mac99 GUI's own VNC option, same wording, same behaviour.
+On the Display tab, below the second-graphics-card fields: a separator,
+a checkbox "Show this Mac's screen over VNC instead", and an entry
+"VNC display (e.g. :1):" that is enabled only when the checkbox is on
+(defaults to `:1` the first time it is switched on).
+
+Record: `"vnc": ""` (off) or a `-vnc` spec string, e.g. `":1"` or
+`"127.0.0.1:9"`. `command.build_argv` emits `-display none -vnc <spec>`
+instead of `-display <m.display>` whenever `m.vnc.strip()` is non-empty;
+VNC and the local display window are mutually exclusive, never both.
+Validation (`model.validate`) rejects a non-empty `vnc` that doesn't match
+`VNC_RE = r"^([A-Za-z0-9.\-]*:)?\d+$"` with "VNC display has to look like
+:1 or 127.0.0.1:1." This applies identically on both platforms: on
+Windows the `.bat` gets the same `-display none -vnc <spec>` tokens.

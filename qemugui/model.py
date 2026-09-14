@@ -34,6 +34,7 @@ SCHEMA = 1
 NAME_RE = re.compile(r"^[A-Za-z0-9._ -]+$")
 MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 ADDR_RE = re.compile(r"^(0x[0-9A-Fa-f]{1,2}|[0-9]{1,2})(\.[0-7])?$")
+VNC_RE = re.compile(r"^([A-Za-z0-9.\-]*:)?\d+$")
 
 # ---------------------------------------------------------------- naming
 #
@@ -274,6 +275,7 @@ class Machine:
     ram_mb: int = 512
     rom: str = ""                # chosen by the person; never guessed
     display: str = "cocoa"
+    vnc: str = ""                 # "" = off; else a -vnc display spec, e.g. ":1"
     audio: str = "default"
     onboard_romfile: str | None = None
     second_gpu: SecondGpu | None = None
@@ -295,6 +297,7 @@ class Machine:
             "ram_mb": self.ram_mb,
             "rom": self.rom,
             "display": self.display,
+            "vnc": self.vnc,
             "audio": self.audio,
             "onboard_romfile": self.onboard_romfile,
             "second_gpu": self.second_gpu.to_dict() if self.second_gpu else None,
@@ -323,6 +326,7 @@ class Machine:
             ram_mb=int(d.get("ram_mb", 512)),
             rom=str(d.get("rom") or ""),
             display=str(d.get("display") or default_display()),
+            vnc=str(d.get("vnc", "") or ""),
             audio=str(d.get("audio", "default")),
             onboard_romfile=(str(d["onboard_romfile"]) if d.get("onboard_romfile") else None),
             second_gpu=SecondGpu.from_dict(d.get("second_gpu")),
@@ -447,6 +451,8 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
         warnings.append("More than 1024 MB is untested.")
     if m.display == "cocoa" and platform != "darwin":
         warnings.append("'cocoa' only works on a Mac.")
+    if m.vnc.strip() and not VNC_RE.match(m.vnc.strip()):
+        errors.append("VNC display has to look like :1 or 127.0.0.1:1.")
     net = m.network
     if net.mode not in NETWORK_MODES:
         errors.append(f"'{net.mode}' is not a network setting.")

@@ -88,7 +88,13 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
         # No ROM chosen yet: the option is left out rather than pointing at a
         # guess. Starting is refused separately, with a plain message.
         argv += ["-bios", _path(m.rom, qd, platform)]
-    argv += ["-display", m.display]
+    # VNC and a local display window are mutually exclusive here: -display
+    # none plus -vnc is the combination confirmed working end-to-end
+    # (5900+N listens, reachable) against this machine type.
+    if m.vnc.strip():
+        argv += ["-display", "none", "-vnc", m.vnc.strip()]
+    else:
+        argv += ["-display", m.display]
 
     audio = m.audio
     if audio == "default":

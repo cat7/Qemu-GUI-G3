@@ -294,6 +294,24 @@ class MachineEditor(tk.Toplevel):
         ttk.Entry(f, textvariable=self.gpu_addr_var, width=8).grid(
             row=8, column=1, sticky="w", pady=(6, 0))
 
+        ttk.Separator(f).grid(row=9, column=0, columnspan=3, sticky="ew", pady=10)
+        self.vnc_on = tk.BooleanVar(value=False)
+        ttk.Checkbutton(f, text="Show this Mac's screen over VNC instead",
+                        variable=self.vnc_on, command=self._vnc_changed).grid(
+            row=10, column=0, columnspan=3, sticky="w")
+        ttk.Label(f, text="VNC display (e.g. :1):").grid(row=11, column=0, sticky="w", pady=(6, 0))
+        self.vnc_var = tk.StringVar()
+        self.vnc_entry = ttk.Entry(f, textvariable=self.vnc_var, width=16)
+        self.vnc_entry.grid(row=11, column=1, sticky="w", pady=(6, 0))
+
+    def _vnc_changed(self, _e=None):
+        if self.vnc_on.get():
+            self.vnc_entry.config(state="normal")
+            if not self.vnc_var.get().strip():
+                self.vnc_var.set(":1")
+        else:
+            self.vnc_entry.config(state="disabled")
+
     def _gpu_changed(self, _e=None):
         """Enabling the card never chooses its ROM file."""
         if self.gpu_on.get() and not self.gpu_addr_var.get():
@@ -438,6 +456,9 @@ class MachineEditor(tk.Toplevel):
         self.ram_var.set(str(m.ram_mb))
         self.rom_var.set(m.rom)
         self.display_var.set(m.display)
+        self.vnc_on.set(bool(m.vnc.strip()))
+        self.vnc_var.set(m.vnc)
+        self._vnc_changed()
         self.onboard_mode.set("file" if m.onboard_romfile else "none")
         self.onboard_rom_var.set(m.onboard_romfile or "")
         if m.second_gpu:
@@ -475,6 +496,7 @@ class MachineEditor(tk.Toplevel):
             m.ram_mb = -1
         m.rom = self.rom_var.get().strip()          # empty until it is chosen
         m.display = self.display_var.get()
+        m.vnc = self.vnc_var.get().strip() if self.vnc_on.get() else ""
         m.onboard_romfile = (self.onboard_rom_var.get().strip() or None
                              if self.onboard_mode.get() == "file" else None)
         if not self.gpu_on.get():

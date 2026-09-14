@@ -276,6 +276,22 @@ class Options(unittest.TestCase):
         m = Machine.from_dict({"name": "old", "qemu_dir": "/Applications/whatever"})
         self.assertNotIn("qemu_dir", json.loads(m.to_json()))
 
+    def test_vnc_replaces_local_display(self):
+        """Confirmed working end-to-end against this machine type (5900+N
+        reachable) with exactly this combination: -display none, -vnc."""
+        m = self.base()
+        m.vnc = ":1"
+        argv = command.build_argv(m, "", "/m", "darwin")
+        self.assertEqual(argv[argv.index("-display") + 1], "none")
+        self.assertEqual(argv[argv.index("-vnc") + 1], ":1")
+
+    def test_no_vnc_means_normal_display_and_no_vnc_flag(self):
+        m = self.base()
+        m.vnc = ""
+        argv = command.build_argv(m, "", "/m", "darwin")
+        self.assertNotIn("-vnc", argv)
+        self.assertNotEqual(argv[argv.index("-display") + 1], "none")
+
 
 class Networking(unittest.TestCase):
     """Addendum 1: all modes go through -nic with model=bmac."""
@@ -392,7 +408,7 @@ class JsonRoundTrip(unittest.TestCase):
 
     def test_full_record_round_trip(self):
         m = Machine(name="Every field", system="macosx_10_0_to_10_2", ram_mb=768, rom="/abs/rom.ROM",
-                    display="cocoa", audio="none",
+                    display="cocoa", vnc=":2", audio="none",
                     onboard_romfile="ati_mach_gt.rom",
                     second_gpu=SecondGpu("ati-rage128-pro", "0x0f", "card.rom"),
                     network=Network("user", "00:11:22:33:44:55"),
@@ -472,6 +488,18 @@ class Validation(unittest.TestCase):
         self.assertTrue(any("Unmounted" in w for w in warnings))
         # named the way the tab names it, not "ATA index 0"
         self.assertTrue(any(w.startswith("IDE 0 Master:") for w in warnings), warnings)
+
+    def test_vnc_validation(self):
+        m = load_fixture("mac-os.json")
+        m.vnc = "not a display"
+        errors, _ = model.validate(m, None, "darwin", check_files=False)
+        self.assertTrue(any("VNC display" in e for e in errors))
+        m.vnc = ":1"
+        errors, _ = model.validate(m, None, "darwin", check_files=False)
+        self.assertEqual(errors, [])
+        m.vnc = "127.0.0.1:9"
+        errors, _ = model.validate(m, None, "darwin", check_files=False)
+        self.assertEqual(errors, [])
 
 
 class LibraryOps(unittest.TestCase):
