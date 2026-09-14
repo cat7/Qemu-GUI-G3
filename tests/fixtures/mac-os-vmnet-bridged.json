@@ -24,7 +24,7 @@
   "ata": [
     {
       "kind": "disk",
-      "file": "/Volumes/Macdata/qemu/hd/9.2-pristine-vm-off.img",
+      "file": "/images/9.2-pristine-vm-off.img",
       "format": "raw"
     },
     null,
@@ -35,7 +35,7 @@
     {
       "id": 3,
       "kind": "cdrom",
-      "file": "/Volumes/Macdata/qemu/iso/8.1.iso",
+      "file": "/images/8.1.iso",
       "format": "raw",
       "identity": null
     }

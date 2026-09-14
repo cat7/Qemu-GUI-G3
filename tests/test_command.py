@@ -45,8 +45,8 @@ USER_MAC_OS = r"""
 -global ati-mach64-gt.romfile=ati_mach_gt.rom \
 -device ati-rage128-pro,addr=0x0e,romfile=ati_nexus128_103_pci.rom \
 -nic user,model=bmac,mac=00:05:02:12:34:56 \
--drive file=/Volumes/Macdata/qemu/hd/9.2-pristine-vm-off.img,format=raw,media=disk,index=0 \
--drive file=/Volumes/Macdata/qemu/iso/8.1.iso,format=raw,if=none,id=cd0 \
+-drive file=/images/9.2-pristine-vm-off.img,format=raw,media=disk,index=0 \
+-drive file=/images/8.1.iso,format=raw,if=none,id=cd0 \
 -device scsi-cd,drive=cd0,scsi-id=3
 """
 
@@ -59,8 +59,8 @@ USER_SERVER = r"""
 -audiodev coreaudio,id=snd -global awacs.audiodev=snd \
 -global ati-mach64-gt.romfile=ati_mach_gt.rom \
 -nic user,model=bmac,mac=00:05:02:12:34:56 \
--drive file=/Volumes/Macdata/qemu/hd/Server1.2v3.img,format=raw,media=disk,index=0 \
--drive file=/Volumes/Macdata/qemu/iso/Server_1.2v3.iso,format=raw,media=cdrom,index=2
+-drive file=/images/Server1.2v3.img,format=raw,media=disk,index=0 \
+-drive file=/images/Server_1.2v3.iso,format=raw,media=cdrom,index=2
 """
 
 USER_LINUX = r"""
@@ -71,7 +71,7 @@ USER_LINUX = r"""
 -global ati-mach64-gt.romfile=ati_gt_fcode.rom \
 -audiodev coreaudio,id=snd -global awacs.audiodev=snd \
 -nic user,model=bmac,mac=00:05:02:12:34:56 \
--drive file=/Users/hsp/Downloads/debian-8.11.0-powerpc-CD-1.iso,format=raw,media=cdrom,index=2
+-drive file=/images/debian-8.11.0-powerpc-CD-1.iso,format=raw,media=cdrom,index=2
 """
 
 
@@ -182,12 +182,12 @@ class Options(unittest.TestCase):
 
     def test_floppy(self):
         m = self.base()
-        m.floppy = Floppy(file="/Volumes/Macdata/qemu/fd/macos71/Install.img", format="raw")
+        m.floppy = Floppy(file="/images/macos71/Install.img", format="raw")
         argv = command.build_argv(m, "", "/m", "darwin")
         i = argv.index("swim3.drive=fd")
         self.assertEqual(argv[i - 1], "-global")
-        self.assertIn("if=none,id=fd,file=/Volumes/Macdata/qemu/fd/macos71/Install.img,format=raw", argv)
-        j = argv.index("if=none,id=fd,file=/Volumes/Macdata/qemu/fd/macos71/Install.img,format=raw")
+        self.assertIn("if=none,id=fd,file=/images/macos71/Install.img,format=raw", argv)
+        j = argv.index("if=none,id=fd,file=/images/macos71/Install.img,format=raw")
         self.assertEqual(argv[j - 1], "-drive")
 
     def test_second_gpu_none(self):

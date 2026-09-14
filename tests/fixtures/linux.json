@@ -21,7 +21,7 @@
     null,
     {
       "kind": "cdrom",
-      "file": "/Users/hsp/Downloads/debian-8.11.0-powerpc-CD-1.iso",
+      "file": "/images/debian-8.11.0-powerpc-CD-1.iso",
       "format": "raw"
     },
     null

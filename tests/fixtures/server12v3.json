@@ -19,13 +19,13 @@
   "ata": [
     {
       "kind": "disk",
-      "file": "/Volumes/Macdata/qemu/hd/Server1.2v3.img",
+      "file": "/images/Server1.2v3.img",
       "format": "raw"
     },
     null,
     {
       "kind": "cdrom",
-      "file": "/Volumes/Macdata/qemu/iso/Server_1.2v3.iso",
+      "file": "/images/Server_1.2v3.iso",
       "format": "raw"
     },
     null

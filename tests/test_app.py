@@ -50,9 +50,9 @@ class InstallDir(unittest.TestCase):
     def test_frozen_bundle_nested_deeper(self):
         got = paths.resolve_install_dir(
             frozen=True,
-            executable="/Users/hsp/qemu/Qemu-system-ppc GUI.app/Contents/MacOS/sub/Qemu-system-ppc GUI",
+            executable="/path/to/qemu/Qemu-system-ppc GUI.app/Contents/MacOS/sub/Qemu-system-ppc GUI",
             source_root="/nowhere")
-        self.assertEqual(got, Path("/Users/hsp/qemu"))
+        self.assertEqual(got, Path("/path/to/qemu"))
 
     def test_frozen_windows_executable(self):
         got = paths.resolve_install_dir(frozen=True,
