@@ -267,6 +267,35 @@ class Governor:
         return cls(str(d.get("mode", "default")), int(d.get("mips", 100) or 100))
 
 
+SHARE_SCOPES = ("guest-only", "all-interfaces")
+SHARE_DEFAULT_USER = "guest"
+
+
+@dataclass
+class Share:
+    folder: str = ""             # "" = no shared folder
+    user: str = SHARE_DEFAULT_USER
+    password: str = ""
+    scope: str = "guest-only"    # guest-only | all-interfaces
+
+    def to_dict(self) -> dict:
+        return {"folder": self.folder, "user": self.user, "password": self.password,
+                "scope": self.scope}
+
+    @classmethod
+    def from_dict(cls, d: Any) -> "Share":
+        if not isinstance(d, dict):
+            return cls()
+        return cls(str(d.get("folder", "") or ""),
+                   str(d.get("user", SHARE_DEFAULT_USER) or SHARE_DEFAULT_USER),
+                   str(d.get("password", "") or ""),
+                   str(d.get("scope", "guest-only") or "guest-only"))
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.folder.strip())
+
+
 @dataclass
 class Machine:
     name: str = "New machine"
@@ -284,6 +313,7 @@ class Machine:
     ata: list = field(default_factory=lambda: [None, None, None, None])
     scsi: list = field(default_factory=list)
     floppy: Floppy | None = None
+    share: Share = field(default_factory=Share)
     extra_args: str = ""
     notes: str = ""
 
@@ -306,6 +336,7 @@ class Machine:
             "ata": [d.to_dict() if d else None for d in self.ata],
             "scsi": [d.to_dict() for d in sorted(self.scsi, key=lambda s: s.id)],
             "floppy": self.floppy.to_dict() if self.floppy else None,
+            "share": self.share.to_dict(),
             "extra_args": self.extra_args,
             "notes": self.notes,
         }
@@ -335,6 +366,7 @@ class Machine:
             ata=ata,
             scsi=scsi,
             floppy=Floppy.from_dict(d.get("floppy")),
+            share=Share.from_dict(d.get("share")),
             extra_args=str(d.get("extra_args", "")),
             notes=str(d.get("notes", "")),
         )
@@ -470,7 +502,18 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
     if m.second_gpu:
         if m.second_gpu.addr and not ADDR_RE.match(m.second_gpu.addr):
             errors.append("The card slot has to look like 0x0e.")
-
+    share = m.share
+    if share.scope not in SHARE_SCOPES:
+        errors.append(f"'{share.scope}' is not a sharing setting.")
+    if share.enabled:
+        if not Path(share.folder.strip()).expanduser().is_dir():
+            errors.append("The shared folder is not a folder that exists.")
+        if not share.user.strip():
+            errors.append("The shared folder has no user name.")
+        if share.scope == "all-interfaces" and not share.password:
+            errors.append("Sharing on all interfaces needs a password.")
+        if share.scope == "guest-only" and net.mode != "user":
+            warnings.append("Guest only sharing is only reachable with default (slirp).")
 
     seen_ids = set()
     for s in m.scsi:
