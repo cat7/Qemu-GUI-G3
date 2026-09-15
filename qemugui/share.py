@@ -22,6 +22,10 @@ GUEST_HOST_ADDR = "10.0.2.2"
 PORTS = (21, 2121)
 PASSIVE_PORTS = range(50000, 50016)
 FULL_PERMS = "elradfmwMT"
+ANONYMOUS_NAMES = ("anonymous", "ftp")
+NO_ACTIVE_MODE = "502 Active mode is not available here; use passive mode."
+ACTIVE_MODE_LOG = ("client asked for active mode (%s); only passive mode works "
+                   "through the emulator's network")
 HOST_IP_PLACEHOLDER = "<host IP>"
 # what vmnet names its bridges on macOS
 VMNET_BRIDGE = {"vmnet-shared": "bridge100", "vmnet-host": "bridge101"}
@@ -63,8 +67,8 @@ def guest_side_host(network_mode: str, ifname: str = "") -> str:
 
 
 def _log(log_path: Path | None) -> logging.Logger:
-    """The library's own logger: into last-run.log when there is one,
-    otherwise only its errors, on stderr."""
+    """The library's own logger: the whole dialog into last-run.log when
+    there is one, otherwise only its errors, on stderr."""
     logger = logging.getLogger("pyftpdlib")
     logger.propagate = False
     for h in list(logger.handlers):
@@ -73,7 +77,7 @@ def _log(log_path: Path | None) -> logging.Logger:
     handler: logging.Handler
     if log_path and Path(log_path).is_file():
         handler = logging.FileHandler(log_path, encoding="utf-8")
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)
     else:
         handler = logging.StreamHandler()
         logger.setLevel(logging.WARNING)
@@ -136,17 +140,36 @@ def start_share(m: Machine, log_path: Path | None = None, ports=PORTS,
     from pyftpdlib.servers import FTPServer
 
     folder = str(Path(share.folder).expanduser())
-    authorizer = DummyAuthorizer()
+
+    class Authorizer(DummyAuthorizer):
+        aliases: tuple = ()
+
+        def validate_authentication(self, username, password, handler):
+            if username in self.aliases:
+                return
+            super().validate_authentication(username, password, handler)
+
+    authorizer = Authorizer()
     if share.password:
         authorizer.add_user(share.user.strip(), share.password, folder, perm=FULL_PERMS)
     else:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             authorizer.add_anonymous(folder, perm=FULL_PERMS)
+        for name in ANONYMOUS_NAMES[1:] + (share.user.strip(),):
+            if name and not authorizer.has_user(name):
+                authorizer.add_user(name, "", folder, perm=FULL_PERMS)
+        authorizer.aliases = tuple(authorizer.user_table)
     encoding = ENCODING.get(m.system, "utf8")
 
     class Handler(FTPHandler):
-        pass
+        def ftp_PORT(self, line):
+            self.log(ACTIVE_MODE_LOG % "PORT")
+            self.respond(NO_ACTIVE_MODE)
+
+        def ftp_EPRT(self, line):
+            self.log(ACTIVE_MODE_LOG % "EPRT")
+            self.respond(NO_ACTIVE_MODE)
 
     Handler.authorizer = authorizer
     Handler.masquerade_address_map = {"127.0.0.1": GUEST_HOST_ADDR}

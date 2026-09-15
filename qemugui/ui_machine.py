@@ -453,6 +453,10 @@ class MachineEditor(tk.Toplevel):
                   foreground=GREY).grid(row=6, column=0, columnspan=3, sticky="w", pady=(2, 0))
         ttk.Label(f, text="In the Mac: ftp://10.0.2.2/ with default (slirp)",
                   foreground=GREY).grid(row=7, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        ttk.Label(f, text="On Mac OS X, Finder mounts FTP read-only",
+                  foreground=GREY).grid(row=8, column=0, columnspan=3, sticky="w")
+        ttk.Label(f, text="Use an FTP program to upload",
+                  foreground=GREY).grid(row=9, column=0, columnspan=3, sticky="w")
 
     def _choose_share_folder(self):
         start = paths.browse_start_dir(self.share_folder_var.get(), None)

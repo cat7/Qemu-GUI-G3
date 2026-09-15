@@ -191,16 +191,73 @@ class ServerOnLoopback(unittest.TestCase):
         self.assertIn(port, share.PASSIVE_PORTS)
         f.close()
 
+    def test_the_record_user_is_an_anonymous_alias_without_a_password(self):
+        self.start(self.machine())
+        for user in ("guest", "anonymous", "ftp"):
+            f = self.client(user, "")
+            self.assertEqual(f.nlst(), [])
+            f.quit()
+        f = self.client("guest", "anything")
+        f.quit()
+        with self.assertRaises(ftplib.error_perm):
+            self.client("someone", "")
+
     def test_a_user_and_password_are_required_when_set(self):
         self.start(self.machine(user="mac", password="secret"))
         with self.assertRaises(ftplib.error_perm):
             self.client()
         with self.assertRaises(ftplib.error_perm):
             self.client("mac", "wrong")
+        with self.assertRaises(ftplib.error_perm):
+            self.client("guest", "")
+        with self.assertRaises(ftplib.error_perm):
+            self.client("ftp", "")
         f = self.client("mac", "secret")
         f.storbinary("STOR ok.txt", io.BytesIO(b"ok"))
         self.assertEqual(f.nlst(), ["ok.txt"])
         f.quit()
+
+    def test_active_mode_is_refused_with_a_502_and_logged(self):
+        log = self.folder.parent / f"{self.folder.name}-run.log"
+        log.write_text("# run\n", encoding="utf-8")
+        try:
+            m = self.machine()
+            self.servers.append(share.start_share(m, log, ports=(self.port,)))
+            f = self.client()
+            with self.assertRaises(ftplib.error_perm) as cm:
+                f.sendcmd("PORT 10,0,2,15,4,1")
+            self.assertTrue(str(cm.exception).startswith("502 "), cm.exception)
+            self.assertIn("passive", str(cm.exception))
+            with self.assertRaises(ftplib.error_perm) as cm:
+                f.sendcmd("EPRT |1|10.0.2.15|1025|")
+            self.assertTrue(str(cm.exception).startswith("502 "), cm.exception)
+            self.assertEqual(f.nlst(), [])          # the session goes on in passive mode
+            f.quit()
+            self.servers.pop().stop()
+            text = log.read_text(encoding="utf-8")
+            self.assertIn("client asked for active mode (PORT); only passive mode works "
+                          "through the emulator's network", text)
+            self.assertIn("client asked for active mode (EPRT)", text)
+        finally:
+            log.unlink()
+
+    def test_the_log_records_the_whole_dialog(self):
+        log = self.folder.parent / f"{self.folder.name}-run.log"
+        log.write_text("# run\n", encoding="utf-8")
+        try:
+            self.servers.append(share.start_share(self.machine(), log, ports=(self.port,)))
+            f = self.client()
+            f.nlst()
+            f.quit()
+            self.servers.pop().stop()
+            text = log.read_text(encoding="utf-8")
+            self.assertTrue(text.startswith("# run\n"))
+            self.assertIn("[share] ", text)
+            self.assertRegex(text, r"<- PASV")
+            self.assertRegex(text, r"-> 227 ")
+            self.assertRegex(text, r"-> 226 ")
+        finally:
+            log.unlink()
 
     def test_all_interfaces_without_a_password_refuses_to_start(self):
         with self.assertRaises(share.ShareError) as cm:
