@@ -19,6 +19,9 @@ HEADER_NOTE = "Written by Qemu-system-ppc GUI. Do not edit."
 
 AUDIO_DEFAULT = {"darwin": "coreaudio", "win32": "dsound"}
 
+# Next to the binary; VNC loads its keyboard layout from <here>/keymaps.
+PC_BIOS_DIR = "pc-bios"
+
 
 def qopt(value: str) -> str:
     """Escape a value for QEMU's key=value option parser (comma -> ,,)."""
@@ -92,6 +95,10 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
     # none plus -vnc is the combination confirmed working end-to-end
     # (5900+N listens, reachable) against this machine type.
     if m.vnc.strip():
+        # The VNC server refuses to start without pc-bios/keymaps/en-us, and
+        # the binary looks for it in ../share/qemu, which a self-contained
+        # distribution folder does not have.
+        argv += ["-L", _path(PC_BIOS_DIR, qd, platform)]
         argv += ["-display", "none", "-vnc", m.vnc.strip()]
     else:
         argv += ["-display", m.display]

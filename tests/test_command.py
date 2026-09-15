@@ -291,6 +291,21 @@ class Options(unittest.TestCase):
         argv = command.build_argv(m, "", "/m", "darwin")
         self.assertNotIn("-vnc", argv)
         self.assertNotEqual(argv[argv.index("-display") + 1], "none")
+        self.assertNotIn("-L", argv)
+
+    def test_vnc_points_L_at_the_pc_bios_next_to_the_binary(self):
+        """The VNC server loads pc-bios/keymaps/en-us at startup and the
+        binary looks for it in ../share/qemu, which the distribution folder
+        does not have; without -L it exits with "could not find keymap file
+        for language 'en-us'". Absolute, because the launcher cd's into the
+        machine folder first."""
+        m = self.base()
+        m.vnc = ":1"
+        argv = command.build_argv(m, "/install", "/m", "darwin")
+        self.assertEqual(argv[argv.index("-L") + 1], "/install/pc-bios")
+        self.assertLess(argv.index("-L"), argv.index("-display"))
+        argv = command.build_argv(m, r"C:\qemu", r"C:\m", "win32")
+        self.assertEqual(argv[argv.index("-L") + 1], r"C:\qemu\pc-bios")
 
 
 class Networking(unittest.TestCase):
