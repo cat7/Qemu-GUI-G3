@@ -1,4 +1,5 @@
-"""The machine editor: Machine, Display, Drives, Network & sound, Advanced.
+"""The machine editor: Machine, Display, Drives, Network & sound, Shared
+folder, Advanced.
 
 Two rules with teeth:
 
@@ -15,7 +16,8 @@ from pathlib import Path
 from tkinter import ttk, filedialog, messagebox
 
 from . import model, paths
-from .model import Machine, AtaDrive, ScsiDrive, Identity, Floppy, SecondGpu, Network, Governor
+from .model import (Machine, AtaDrive, ScsiDrive, Identity, Floppy, SecondGpu, Network,
+                    Governor, Share)
 from .systems import SYSTEMS, system_labels, system_by_label
 from .ui_dialogs import show_validation, CreateDiskDialog
 
@@ -188,6 +190,7 @@ class MachineEditor(tk.Toplevel):
         self._build_display()
         self._build_drives()
         self._build_net_audio()
+        self._build_share()
         self._build_advanced()
 
         bar = ttk.Frame(self)
@@ -421,6 +424,42 @@ class MachineEditor(tk.Toplevel):
         else:
             self.ifname_entry.config(state="disabled")
 
+    def _build_share(self):
+        f = self._tab("Shared folder")
+        f.columnconfigure(1, weight=1)
+        ttk.Label(f, text="Shared folder", font=("", 0, "bold")).grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        ttk.Label(f, text="Folder:").grid(row=1, column=0, sticky="w", pady=4)
+        self.share_folder_var = tk.StringVar()
+        ttk.Entry(f, textvariable=self.share_folder_var, width=40).grid(
+            row=1, column=1, sticky="ew", pady=4)
+        ttk.Button(f, text="Choose…", command=self._choose_share_folder).grid(
+            row=1, column=2, sticky="w", padx=4, pady=4)
+        ttk.Label(f, text="User:").grid(row=2, column=0, sticky="w", pady=4)
+        self.share_user_var = tk.StringVar(value=Share().user)
+        ttk.Entry(f, textvariable=self.share_user_var, width=20).grid(
+            row=2, column=1, sticky="w", pady=4)
+        ttk.Label(f, text="Password:").grid(row=3, column=0, sticky="w", pady=4)
+        self.share_password_var = tk.StringVar()
+        ttk.Entry(f, textvariable=self.share_password_var, width=20, show="*").grid(
+            row=3, column=1, sticky="w", pady=4)
+        self.share_scope = tk.StringVar(value="guest-only")
+        ttk.Radiobutton(f, text="Guest only", variable=self.share_scope,
+                        value="guest-only").grid(row=4, column=0, columnspan=3, sticky="w",
+                                                 pady=(8, 0))
+        ttk.Radiobutton(f, text="All interfaces", variable=self.share_scope,
+                        value="all-interfaces").grid(row=5, column=0, columnspan=3, sticky="w")
+        ttk.Label(f, text="All interfaces needs a password and is for vmnet",
+                  foreground=GREY).grid(row=6, column=0, columnspan=3, sticky="w", pady=(2, 0))
+        ttk.Label(f, text="In the Mac: ftp://10.0.2.2/ with default (slirp)",
+                  foreground=GREY).grid(row=7, column=0, columnspan=3, sticky="w", pady=(8, 0))
+
+    def _choose_share_folder(self):
+        start = paths.browse_start_dir(self.share_folder_var.get(), None)
+        d = filedialog.askdirectory(parent=self, initialdir=str(start))
+        if d:
+            self.share_folder_var.set(d)
+
     def _build_advanced(self):
         f = self._tab("Advanced")
         f.columnconfigure(1, weight=1)
@@ -482,6 +521,10 @@ class MachineEditor(tk.Toplevel):
         self.ifname_var.set(m.network.ifname)
         self._net_mode_changed()
         self.audio_var.set(m.audio)
+        self.share_folder_var.set(m.share.folder)
+        self.share_user_var.set(m.share.user)
+        self.share_password_var.set(m.share.password)
+        self.share_scope.set(m.share.scope)
         self.gov_mode.set(m.governor.mode)
         self.mips_var.set(str(m.governor.mips))
         self.extra_var.set(m.extra_args)
@@ -520,6 +563,8 @@ class MachineEditor(tk.Toplevel):
             mips = 0
         m.governor = Governor(self.gov_mode.get(), mips)
         m.audio = self.audio_var.get()
+        m.share = Share(self.share_folder_var.get().strip(), self.share_user_var.get().strip(),
+                        self.share_password_var.get(), self.share_scope.get())
         m.extra_args = self.extra_var.get().strip()
         return m
 
