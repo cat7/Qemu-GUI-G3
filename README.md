@@ -7,8 +7,10 @@ Apple ROM. The program must sit in the same folder as `qemu-system-ppc`
 
 ## Requirements
 
-- To run from source: Python 3.11+ with tkinter, no third-party packages.
-- To build a distributable bundle: PyInstaller.
+- To run from source: Python 3.11+ with tkinter, plus `pyftpdlib` for the
+  shared folder (`python -m pip install pyftpdlib`).
+- To build a distributable bundle: PyInstaller, with `pyftpdlib` installed
+  in the same Python.
 
 ## Run from source
 
@@ -24,7 +26,16 @@ and not redistributable):
         -m PyInstaller --noconfirm QemuGUI.spec
 
 Result: `dist/Qemu-system-ppc GUI.app`. Put it in the folder that holds
-`qemu-system-ppc`.
+`qemu-system-ppc`. For a build that runs only on the building machine's
+architecture, prefix the command with `QEMUGUI_TARGET_ARCH=arm64` (or
+`x86_64`).
+
+## Shared folder
+
+Each machine can share one host folder over FTP while it runs. With the
+default (slirp) network the Mac reaches it at `ftp://10.0.2.2/`
+(`:2121` when port 21 is taken); with vmnet choose "All interfaces", set
+a password, and use the host's own address.
 
 ## Build on Windows
 

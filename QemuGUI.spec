@@ -22,10 +22,12 @@
 # read-only. The spec file keeps its own name; only the program's name
 # changed.
 
+import os
 import sys
 
 # universal2 is a macOS notion, and PyInstaller refuses it elsewhere.
-TARGET_ARCH = 'universal2' if sys.platform == 'darwin' else None
+# QEMUGUI_TARGET_ARCH=arm64 builds for this machine only.
+TARGET_ARCH = (os.environ.get('QEMUGUI_TARGET_ARCH') or 'universal2') if sys.platform == 'darwin' else None
 
 a = Analysis(
     ['qemu_gui.py'],
@@ -33,7 +35,9 @@ a = Analysis(
     binaries=[],
     datas=[],
     hiddenimports=['tkinter', 'tkinter.ttk', 'tkinter.filedialog',
-                   'tkinter.messagebox', 'tkinter.simpledialog'],
+                   'tkinter.messagebox', 'tkinter.simpledialog',
+                   'pyftpdlib', 'pyftpdlib.authorizers', 'pyftpdlib.handlers',
+                   'pyftpdlib.servers'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
