@@ -15,8 +15,8 @@
 # tkinter, Apple's /usr/bin/python3 is arm64e and is not redistributable.
 #
 # Put the result into the folder that holds qemu-system-ppc:
-# "dist/Qemu-system-ppc GUI.app" on macOS, the contents of
-# "dist/Qemu-system-ppc GUI/" on Windows. The program works that folder out
+# "dist/Qemu-system-ppc GUI.app" on macOS, the single
+# "dist/Qemu-system-ppc GUI.exe" on Windows. The program works that folder out
 # itself (paths.resolve_install_dir walks up out of the .app), and keeps
 # Machines/ beside the application, never inside the bundle, which is
 # read-only. The spec file keeps its own name; only the program's name
@@ -46,46 +46,62 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name='Qemu-system-ppc GUI',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
-    console=False,
-    target_arch=TARGET_ARCH,
-    codesign_identity=None,
-    entitlements_file=None,
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=False,
-    name='Qemu-system-ppc GUI',
-)
-app = BUNDLE(
-    coll,
-    name='Qemu-system-ppc GUI.app',
-    icon=None,
-    bundle_identifier='org.cat7.qemu-gui',
-    info_plist={
-        'CFBundleName': 'Qemu-system-ppc GUI',
-        'CFBundleDisplayName': 'Qemu-system-ppc GUI',
-        'CFBundleShortVersionString': '1.0',
-        'CFBundleVersion': '1.0',
-        # Without this the window is drawn at 1x and looks blurred on a
-        # Retina screen.
-        'NSHighResolutionCapable': True,
-        # What the python.org universal2 build itself requires.
-        'LSMinimumSystemVersion': '10.13',
-        # One window, no document types, and it must not keep running with
-        # no windows open.
-        'LSApplicationCategoryType': 'public.app-category.utilities',
-    },
-)
+if sys.platform == 'win32':
+    # One self-contained .exe; it unpacks itself to a temp folder at start.
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.datas,
+        [],
+        name='Qemu-system-ppc GUI',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        console=False,
+    )
+else:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name='Qemu-system-ppc GUI',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        console=False,
+        target_arch=TARGET_ARCH,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.datas,
+        strip=False,
+        upx=False,
+        name='Qemu-system-ppc GUI',
+    )
+    app = BUNDLE(
+        coll,
+        name='Qemu-system-ppc GUI.app',
+        icon=None,
+        bundle_identifier='org.cat7.qemu-gui',
+        info_plist={
+            'CFBundleName': 'Qemu-system-ppc GUI',
+            'CFBundleDisplayName': 'Qemu-system-ppc GUI',
+            'CFBundleShortVersionString': '1.0',
+            'CFBundleVersion': '1.0',
+            # Without this the window is drawn at 1x and looks blurred on a
+            # Retina screen.
+            'NSHighResolutionCapable': True,
+            # What the python.org universal2 build itself requires.
+            'LSMinimumSystemVersion': '10.13',
+            # One window, no document types, and it must not keep running with
+            # no windows open.
+            'LSApplicationCategoryType': 'public.app-category.utilities',
+        },
+    )

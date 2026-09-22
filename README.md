@@ -42,8 +42,8 @@ a password, and use the host's own address.
     pyinstaller --noconfirm QemuGUI.spec
 
 `QemuGUI.spec` targets `universal2` only on macOS; on Windows it produces a
-windowed, onedir build at `dist/Qemu-system-ppc GUI/`. Put that folder's
-contents alongside `qemu-system-ppc.exe`.
+single windowed executable, `dist/Qemu-system-ppc GUI.exe`. Put it
+alongside `qemu-system-ppc.exe`.
 
 ## Tests
 
