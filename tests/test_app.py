@@ -727,6 +727,61 @@ class TheCreateDiskButton(unittest.TestCase):
         self.assertFalse(any("not found" in l for l in labels), labels)
 
 
+@unittest.skipUnless(_tk_available(), "no display")
+class TheNetworkAndSoundTabFollowsTheHost(unittest.TestCase):
+    """The Windows build showed the Mac's wording and came up with no
+    network (user, 2026-09-22). A new machine opened on either host shows
+    slirp, the host's own interface label and the host's own sound backend."""
+
+    def setUp(self):
+        self.saved = paths.HOST_PLATFORM
+        self.td = tempfile.TemporaryDirectory()
+        self.roots = []
+
+    def tearDown(self):
+        paths.HOST_PLATFORM = self.saved
+        for r in self.roots:
+            r.destroy()
+        self.td.cleanup()
+
+    def _tab(self, platform: str):
+        import tkinter as tk
+        from qemugui.ui_machine import MachineEditor
+        paths.HOST_PLATFORM = platform
+        lib = model.Library(Path(self.td.name) / "Machines")
+        root = tk.Tk(); root.withdraw()
+        self.roots.append(root)
+        ed = MachineEditor(root, model.new_machine("", "other"), lib, self.td.name,
+                           on_save=lambda *a: None, is_new=True)
+        ed.withdraw()
+        return ed
+
+    def test_windows(self):
+        ed = self._tab("win32")
+        self.assertEqual(ed.net_mode.get(), "default (slirp)")
+        self.assertEqual(ed.net_mode_cb.get(), "default (slirp)")
+        values = list(ed.net_mode_cb.cget("values"))
+        self.assertEqual(values[0], "default (slirp)")
+        self.assertIn("tap", values)
+        self.assertFalse(any(v.startswith("vmnet") for v in values), values)
+        self.assertEqual(str(ed.ifname_label.cget("text")), "Tap device name:")
+        self.assertEqual(ed.audio_var.get(), "default")
+        self.assertEqual(str(ed.audio_default_rb.cget("text")), "DirectSound")
+        self.assertEqual(ed.collect().network.mode, "user")
+        self.assertEqual(ed.collect().audio, "default")
+
+    def test_mac(self):
+        ed = self._tab("darwin")
+        self.assertEqual(ed.net_mode.get(), "default (slirp)")
+        values = list(ed.net_mode_cb.cget("values"))
+        self.assertEqual(values[0], "default (slirp)")
+        self.assertIn("vmnet-bridged", values)
+        self.assertNotIn("tap", values)
+        self.assertEqual(str(ed.ifname_label.cget("text")), "Vmnet host interface:")
+        self.assertEqual(str(ed.audio_default_rb.cget("text")), "CoreAudio")
+        self.assertEqual(ed.collect().network.mode, "user")
+
+
 class TheSecondScreenIsOptIn(unittest.TestCase):
     """Nothing fits the extra card for you: a new machine has none, whichever
     system is chosen (user, 2026-09-05)."""
@@ -784,7 +839,8 @@ class TheLabelsTheUserAskedFor(unittest.TestCase):
     test and the commit message claimed otherwise. Guarded now."""
 
     def test_network_sound_display_and_drive_labels(self):
-        src = (Path(__file__).resolve().parent.parent / "qemugui" / "ui_machine.py").read_text()
+        gui = Path(__file__).resolve().parent.parent / "qemugui"
+        src = (gui / "ui_machine.py").read_text() + (gui / "model.py").read_text()
         for wanted in ("Vmnet host interface:", "Card MAC address:", "Sound interface",
                        "CoreAudio", "Display type", "Select sdl when enabling dual screen",
                        'text="IDE"'):

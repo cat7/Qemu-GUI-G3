@@ -262,7 +262,7 @@ class MachineEditor(tk.Toplevel):
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
         ttk.Label(f, text="Display:").grid(row=1, column=0, sticky="w", pady=(0, 8))
         self.display_var = tk.StringVar()
-        displays = model.DISPLAYS.get("win32" if paths.is_windows() else paths.HOST_PLATFORM,
+        displays = model.DISPLAYS.get("win32" if paths.is_windows(paths.HOST_PLATFORM) else paths.HOST_PLATFORM,
                                       ("sdl", "gtk"))
         ttk.Combobox(f, textvariable=self.display_var, values=list(displays), state="readonly",
                      width=10).grid(row=1, column=1, sticky="w", pady=(0, 8))
@@ -393,10 +393,11 @@ class MachineEditor(tk.Toplevel):
         ttk.Label(f, text="Connection:").grid(row=2, column=0, sticky="w")
         self.net_mode = tk.StringVar(value=model.network_mode_label("user"))
         self.net_mode_cb = ttk.Combobox(f, textvariable=self.net_mode, state="readonly", width=18,
-                                        values=model.network_labels_for_host())
+                                        values=model.network_labels_for_host(paths.HOST_PLATFORM))
         self.net_mode_cb.grid(row=2, column=1, sticky="w")
         self.net_mode_cb.bind("<<ComboboxSelected>>", self._net_mode_changed)
-        ttk.Label(f, text="Vmnet host interface:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        self.ifname_label = ttk.Label(f, text=model.ifname_label(paths.HOST_PLATFORM))
+        self.ifname_label.grid(row=3, column=0, sticky="w", pady=(6, 0))
         self.ifname_var = tk.StringVar()
         self.ifname_entry = ttk.Entry(f, textvariable=self.ifname_var, width=28)
         self.ifname_entry.grid(row=3, column=1, sticky="w", pady=(6, 0))
@@ -408,8 +409,9 @@ class MachineEditor(tk.Toplevel):
         ttk.Label(f, text="Sound interface", font=("", 0, "bold")).grid(
             row=6, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.audio_var = tk.StringVar(value="default")
-        ttk.Radiobutton(f, text="CoreAudio", variable=self.audio_var, value="default").grid(
-            row=7, column=0, columnspan=3, sticky="w")
+        self.audio_default_rb = ttk.Radiobutton(f, text=model.default_audio_label(paths.HOST_PLATFORM),
+                                                variable=self.audio_var, value="default")
+        self.audio_default_rb.grid(row=7, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(f, text="SDL", variable=self.audio_var, value="sdl").grid(
             row=8, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(f, text="None", variable=self.audio_var, value="none").grid(
@@ -420,7 +422,7 @@ class MachineEditor(tk.Toplevel):
         if mode in model.NETWORK_MODES_WITH_IFNAME:
             self.ifname_entry.config(state="normal")
             if not self.ifname_var.get():
-                self.ifname_var.set(model.default_ifname(mode))
+                self.ifname_var.set(model.default_ifname(mode, paths.HOST_PLATFORM))
         else:
             self.ifname_entry.config(state="disabled")
 
@@ -519,7 +521,7 @@ class MachineEditor(tk.Toplevel):
         self.floppy_mode.set("file" if m.floppy else "none")
         self.floppy_var.set(m.floppy.file if m.floppy else "")
         self.net_mode_cb.config(
-            values=model.network_labels_for_host(current=m.network.mode))
+            values=model.network_labels_for_host(paths.HOST_PLATFORM, m.network.mode))
         self.net_mode.set(model.network_mode_label(m.network.mode))
         self.mac_var.set(m.network.mac)
         self.ifname_var.set(m.network.ifname)

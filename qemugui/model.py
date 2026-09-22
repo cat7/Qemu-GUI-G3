@@ -69,9 +69,9 @@ def default_display(platform: str = paths.HOST_PLATFORM) -> str:
     starts with: ``cocoa`` on a Mac, ``sdl`` anywhere else."""
     return DISPLAYS.get("win32" if paths.is_windows(platform) else platform, ("sdl",))[0]
 AUDIO_MODES = ("default", "sdl", "none")
-NETWORK_MODES = ("none", "user", "vmnet-bridged", "vmnet-shared", "vmnet-host", "tap")
+NETWORK_MODES = ("user", "none", "vmnet-bridged", "vmnet-shared", "vmnet-host", "tap")
 # platform each mode is meant for (None = all); "darwin" | "win32"
-NETWORK_MODE_PLATFORM = {"none": None, "user": None, "vmnet-bridged": "darwin",
+NETWORK_MODE_PLATFORM = {"user": None, "none": None, "vmnet-bridged": "darwin",
                          "vmnet-shared": "darwin", "vmnet-host": "darwin", "tap": "win32"}
 NETWORK_MODES_WITH_IFNAME = ("vmnet-bridged", "tap")
 GOVERNOR_MODES = ("default", "off", "mips")
@@ -247,6 +247,19 @@ def default_ifname(mode: str, platform: str = paths.HOST_PLATFORM) -> str:
     if mode == "vmnet-bridged" and platform == "darwin":
         return "en0"
     return ""
+
+
+def ifname_label(platform: str = paths.HOST_PLATFORM) -> str:
+    return "Vmnet host interface:" if platform == "darwin" else "Tap device name:"
+
+
+AUDIO_BACKEND_LABELS = {"coreaudio": "CoreAudio", "dsound": "DirectSound", "sdl": "Default (sdl)"}
+
+
+def default_audio_label(platform: str = paths.HOST_PLATFORM) -> str:
+    """What the "default" sound choice is called on this host."""
+    backend = paths.resolve_audio("default", platform)
+    return AUDIO_BACKEND_LABELS.get(backend, backend)
 
 
 @dataclass

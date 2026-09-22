@@ -111,6 +111,17 @@ def has_qemu(folder: Path | str | None, platform: str = HOST_PLATFORM) -> bool:
     return (Path(folder) / qemu_binary_name(platform)).is_file()
 
 
+AUDIO_DEFAULT = {"darwin": "coreaudio", "win32": "dsound"}
+
+
+def resolve_audio(audio: str, platform: str = HOST_PLATFORM) -> str:
+    """"default" resolves to this host's native backend (coreaudio on a Mac,
+    dsound on Windows); anything else (sdl, none) passes through unchanged."""
+    if audio != "default":
+        return audio
+    return AUDIO_DEFAULT.get(platform, "sdl")
+
+
 def pure_path(p: str, platform: str = HOST_PLATFORM) -> PurePath:
     """A path object for *platform* without touching the filesystem."""
     return PureWindowsPath(p) if is_windows(platform) else PurePosixPath(p)

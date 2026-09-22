@@ -17,7 +17,7 @@ from .model import Machine
 
 HEADER_NOTE = "Written by Qemu-system-ppc GUI. Do not edit."
 
-AUDIO_DEFAULT = {"darwin": "coreaudio", "win32": "dsound"}
+AUDIO_DEFAULT = paths.AUDIO_DEFAULT
 
 # Next to the binary; VNC loads its keyboard layout from <here>/keymaps.
 PC_BIOS_DIR = "pc-bios"
@@ -103,9 +103,7 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
     else:
         argv += ["-display", m.display]
 
-    audio = m.audio
-    if audio == "default":
-        audio = AUDIO_DEFAULT.get(platform, "sdl")
+    audio = paths.resolve_audio(m.audio, platform)
     argv += ["-audiodev", f"{audio},id=snd", "-global", "awacs.audiodev=snd"]
 
     if m.onboard_romfile:
