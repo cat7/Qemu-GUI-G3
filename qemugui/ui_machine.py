@@ -34,21 +34,25 @@ GREY = "gray"
 EDITOR_WIDTH = 813
 
 
-def browse_file(parent, var: tk.StringVar, filetypes, fallback: Path | str | None = None) -> None:
+def browse_file(parent, var: tk.StringVar, filetypes, fallback: Path | str | None = None) -> str:
     start = paths.browse_start_dir(var.get(), fallback)
     f = filedialog.askopenfilename(parent=parent, initialdir=str(start), filetypes=filetypes)
     if f:
         var.set(f)
+        return f
+    return ""
 
 
 class FilePicker:
     """One control for one file: type a path into it, paste one into it, or
     double-click it to go and find one. Empty until somebody fills it in."""
 
-    def __init__(self, master, var: tk.StringVar, filetypes, width: int = 40, fallback=None):
+    def __init__(self, master, var: tk.StringVar, filetypes, width: int = 40, fallback=None,
+                 on_pick=None):
         self.var = var
         self.filetypes = filetypes
         self.fallback = fallback
+        self.on_pick = on_pick
         self.entry = ttk.Entry(master, textvariable=var, width=width)
         self.entry.bind("<Double-Button-1>", self._browse)
         var.trace_add("write", lambda *_a: self._refresh())
@@ -65,7 +69,9 @@ class FilePicker:
 
     def _browse(self, _e=None):
         fb = self.fallback() if callable(self.fallback) else self.fallback
-        browse_file(self.entry.winfo_toplevel(), self.var, self.filetypes, fb)
+        chosen = browse_file(self.entry.winfo_toplevel(), self.var, self.filetypes, fb)
+        if chosen and self.on_pick:
+            self.on_pick(chosen)
         return "break"
 
 
@@ -86,7 +92,7 @@ class DriveRow:
         cb.bind("<<ComboboxSelected>>", self._kind_changed)
         # asks for little and grows: the file column is the one that expands
         self.picker = FilePicker(master, self.file, IMAGE_TYPES, width=14 if scsi else 34,
-                                 fallback=fallback)
+                                 fallback=fallback, on_pick=self._file_picked)
         self.picker.grid(row=row, column=2, sticky="ew", padx=2, pady=1)
         self.file.trace_add("write", lambda *_a: self._infer_kind())
         ttk.Combobox(master, textvariable=self.format, values=model.FORMATS, state="readonly",
@@ -100,6 +106,11 @@ class DriveRow:
             ttk.Entry(master, textvariable=self.vendor, width=7).grid(row=row, column=5, padx=1)
             ttk.Entry(master, textvariable=self.product, width=12).grid(row=row, column=6, padx=1)
             ttk.Entry(master, textvariable=self.ver, width=4).grid(row=row, column=7, padx=1)
+
+    def _file_picked(self, path: str):
+        """Only a file chosen through the dialog re-detects the format, so a
+        format set by hand survives until another file is chosen."""
+        self.format.set(model.detect_format(path))
 
     def _infer_kind(self):
         """A file chosen while the position still says "Empty" would be
@@ -557,7 +568,9 @@ class MachineEditor(tk.Toplevel):
         m.ata = [row.get_ata() for row in self.ata_rows]
         m.scsi = [d for d in (row.get_scsi(sid) for sid, row in enumerate(self.scsi_rows)) if d]
         if self.floppy_mode.get() == "file" and self.floppy_var.get().strip():
-            m.floppy = Floppy(self.floppy_var.get().strip(), "raw")
+            # the floppy row has no format control, so it is always detected
+            floppy_file = self.floppy_var.get().strip()
+            m.floppy = Floppy(floppy_file, model.detect_format(floppy_file))
         else:
             m.floppy = None
         mode = model.network_mode_by_label(self.net_mode.get())

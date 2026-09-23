@@ -1,6 +1,6 @@
 """Build the QEMU argv for a Machine and render it as run.command / run.bat.
 
-Pure: no Tk, no filesystem access beyond string handling. The GUI renders
+No Tk; the only filesystem access is reading an image's first bytes. The GUI renders
 for the platform it runs on; tests pass ``platform=`` explicitly
 (``"darwin"``, ``"win32"``, ``"linux"``).
 
@@ -10,10 +10,11 @@ here only keeps each token whole. One argv list, two renderings.
 
 from __future__ import annotations
 
+import os
 import shlex
 
 from . import paths
-from .model import Machine
+from .model import Machine, detect_format
 
 HEADER_NOTE = "Written by Qemu-system-ppc GUI. Do not edit."
 
@@ -71,6 +72,20 @@ def nic_option(net) -> str:
     raise ValueError(f"unknown network mode {net.mode!r}")
 
 
+def drive_format(stored: str, file: str, base: str) -> str:
+    """The format QEMU is told. A stored non-raw value is somebody's own
+    choice and stands; a stored "raw" is checked against the file, because
+    every record saved before detection existed says "raw"."""
+    fmt = (stored or "").strip()
+    if fmt and fmt != "raw":
+        return fmt
+    # the file lives on this host, whatever platform the launcher is for
+    path = paths.join_path(base, file, paths.HOST_PLATFORM)
+    if not os.path.isfile(path):
+        return "raw"
+    return detect_format(path)
+
+
 def needs_sudo(m: Machine, platform: str = paths.HOST_PLATFORM) -> bool:
     """vmnet-* launchers run the binary under sudo (macOS only; never in a .bat)."""
     return m.network.needs_sudo and not paths.is_windows(platform)
@@ -124,7 +139,8 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
             continue  # empty slot, or a seeded slot with no image yet
         media = "cdrom" if d.kind == "cdrom" else "disk"
         argv += ["-drive", f"file={qopt(_path(d.file, machine_dir, platform))},"
-                           f"format={d.format or 'raw'},media={media},index={index}"]
+                           f"format={drive_format(d.format, d.file, machine_dir)},"
+                           f"media={media},index={index}"]
 
     for s in sorted(m.scsi, key=lambda x: x.id):
         if not s.file:
@@ -133,7 +149,8 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
         drive_id = f"{prefix}{s.id}"
         dev = "scsi-cd" if s.kind == "cdrom" else "scsi-hd"
         argv += ["-drive", f"file={qopt(_path(s.file, machine_dir, platform))},"
-                           f"format={s.format or 'raw'},if=none,id={drive_id}"]
+                           f"format={drive_format(s.format, s.file, machine_dir)},"
+                           f"if=none,id={drive_id}"]
         tok = f"{dev},drive={drive_id},scsi-id={s.id}"
         if s.identity:
             ident = s.identity
@@ -143,7 +160,7 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
 
     if m.floppy and m.floppy.file:
         argv += ["-drive", f"if=none,id=fd,file={qopt(_path(m.floppy.file, machine_dir, platform))},"
-                           f"format={m.floppy.format or 'raw'}",
+                           f"format={drive_format(m.floppy.format, m.floppy.file, machine_dir)}",
                  "-global", "swim3.drive=fd"]
 
     argv += split_extra_args(m.extra_args, platform)

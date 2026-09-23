@@ -61,6 +61,34 @@ SCSI_SELF_LABEL = "Macintosh"
 
 DRIVE_KINDS = ("disk", "cdrom")
 FORMATS = ("raw", "qcow2")
+
+# QEMU probes an image by its magic number; do the same, so an existing file
+# picked in the editor is described correctly instead of always as "raw".
+FORMAT_MAGIC = ((b"QFI\xfb", "qcow2"),
+                (b"KDMV", "vmdk"),
+                (b"conectix", "vpc"),
+                (b"<<< Oracle VM VirtualBox Disk Image", "vdi"))
+FORMAT_BY_SUFFIX = {".qcow2": "qcow2", ".qcow": "qcow2", ".vmdk": "vmdk",
+                    ".vdi": "vdi", ".vhd": "vpc", ".vhdx": "vpc"}
+MAGIC_LENGTH = max(len(magic) for magic, _ in FORMAT_MAGIC)
+
+
+def detect_format(path: str) -> str:
+    """The format of an image file: its magic number, else its name. Anything
+    unknown, missing, unreadable or not offered here answers "raw". Never raises."""
+    p = str(path or "")
+    name = FORMAT_BY_SUFFIX.get(Path(p).suffix.lower(), "raw")
+    try:
+        with open(p, "rb") as fh:
+            head = fh.read(MAGIC_LENGTH)
+    except OSError:
+        return "raw"
+    for magic, fmt in FORMAT_MAGIC:
+        if head.startswith(magic):
+            name = fmt
+            break
+    return name if name in FORMATS else "raw"
+
 DISPLAYS = {"darwin": ("cocoa", "sdl"), "win32": ("sdl", "gtk"), "linux": ("sdl", "gtk")}
 
 

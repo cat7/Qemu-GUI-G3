@@ -736,3 +736,72 @@ class DisplayChoice(unittest.TestCase):
         errors, warnings = model.validate(m, None, "win32", check_files=False)
         self.assertEqual(errors, [])
         self.assertFalse(any("cocoa" in w for w in warnings), warnings)
+
+
+class ImageFormatDetection(unittest.TestCase):
+    """User report 2026-09-23: an existing qcow2 image was launched with
+    format=raw, so QEMU could not boot it."""
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.dir = Path(self.td.name)
+        self.addCleanup(self.td.cleanup)
+
+    def _image(self, name: str, head: bytes) -> Path:
+        p = self.dir / name
+        p.write_bytes(head + b"\0" * 64)
+        return p
+
+    def test_magic_beats_the_name(self):
+        p = self._image("disk.img", b"QFI\xfb\x00\x00\x00\x03")
+        self.assertEqual(model.detect_format(str(p)), "qcow2")
+
+    def test_extension_is_the_fallback(self):
+        p = self._image("disk.qcow2", b"not a header")
+        self.assertEqual(model.detect_format(str(p)), "qcow2")
+        self.assertEqual(model.detect_format(str(self._image("plain.img", b"\0\0"))), "raw")
+
+    def test_a_format_this_gui_does_not_offer_is_raw(self):
+        self.assertEqual(model.detect_format(str(self._image("d.vmdk", b"KDMV"))), "raw")
+        self.assertEqual(model.detect_format(str(self._image("d.vhd", b"conectix"))), "raw")
+        self.assertEqual(
+            model.detect_format(str(self._image("d.vdi", b"<<< Oracle VM VirtualBox Disk Image"))),
+            "raw")
+
+    def test_missing_file_is_raw(self):
+        self.assertEqual(model.detect_format(str(self.dir / "nothing.qcow2")), "raw")
+        self.assertEqual(model.detect_format(str(self.dir / "nothing.img")), "raw")
+
+    def test_an_unreadable_path_never_raises(self):
+        self.assertEqual(model.detect_format(str(self.dir)), "raw")
+        self.assertEqual(model.detect_format(""), "raw")
+        self.assertEqual(model.detect_format(None), "raw")
+
+    def test_a_record_saved_as_raw_is_repaired(self):
+        self._image("guest.img", b"QFI\xfb\x00\x00\x00\x03")
+        m = model.new_machine("Repair", "macos_8_to_9")
+        m.rom = "PowerMacG3v3.ROM"
+        m.ata[0] = AtaDrive("disk", "guest.img", "raw")
+        m.scsi = [ScsiDrive(0, "disk", "guest.img", "", None)]
+        m.floppy = Floppy("guest.img", "raw")
+        argv = command.build_argv(m, "/q", str(self.dir), "darwin")
+        drives = [t for t in argv if t.startswith("file=") or ",file=" in t]
+        self.assertEqual(len(drives), 3)
+        for tok in drives:
+            self.assertIn("format=qcow2", tok)
+            self.assertNotIn("format=raw", tok)
+        path, _ = command.write_launcher(m, "/q", str(self.dir), "darwin")
+        self.assertIn("format=qcow2", path.read_text())
+
+    def test_a_chosen_format_is_never_overridden(self):
+        self._image("plain.img", b"\0\0")
+        m = model.new_machine("Kept", "macos_8_to_9")
+        m.ata[0] = AtaDrive("disk", "plain.img", "qcow2")
+        argv = command.build_argv(m, "/q", str(self.dir), "darwin")
+        self.assertTrue(any("format=qcow2" in t for t in argv), argv)
+
+    def test_a_missing_image_still_renders(self):
+        m = model.new_machine("Gone", "macos_8_to_9")
+        m.ata[0] = AtaDrive("disk", "/Volumes/Unmounted/x.qcow2", "raw")
+        argv = command.build_argv(m, "/q", str(self.dir), "darwin")
+        self.assertTrue(any("format=raw" in t for t in argv), argv)
