@@ -216,9 +216,27 @@ def bat_quote(token: str) -> str:
     return t
 
 
-def render_bat(argv: list[str]) -> str:
+# The GUI is a windowed build, so Windows gives the emulator a fresh console of
+# its own: name it, cut it down to a readable size, and hold it open on a
+# failure long enough to read what went wrong.
+BAT_TITLE = "Qemu-system-ppc"
+BAT_MODE = "mode con: cols=100 lines=30"
+BAT_PAUSE = "if errorlevel 1 pause"
+
+
+def bat_title(name: str) -> str:
+    """cmd's `title` takes the rest of the line raw, so drop anything it would
+    redirect, expand or quote."""
+    text = "".join(c for c in str(name or "")
+                   if c.isprintable() and c not in '&<>|^"%')
+    return text.strip()[:40] or BAT_TITLE
+
+
+def render_bat(argv: list[str], title: str = "") -> str:
     lines = ["@echo off",
              f"rem {HEADER_NOTE}",
+             f"title {bat_title(title)}",
+             BAT_MODE,
              'cd /d "%~dp0"',
              "",
              bat_quote(argv[0]) + " ^"]
@@ -226,18 +244,20 @@ def render_bat(argv: list[str]) -> str:
     for i, g in enumerate(groups):
         cont = " ^" if i < len(groups) - 1 else ""
         lines.append(" ".join(bat_quote(t) for t in g) + cont)
+    lines += ["", BAT_PAUSE]
     return "\r\n".join(lines) + "\r\n"
 
 
-def render_launcher(argv: list[str], platform: str = paths.HOST_PLATFORM, sudo: bool = False) -> str:
+def render_launcher(argv: list[str], platform: str = paths.HOST_PLATFORM, sudo: bool = False,
+                    title: str = "") -> str:
     """The .bat never gets sudo; *sudo* only affects the shell rendering."""
-    return render_bat(argv) if paths.is_windows(platform) else render_shell(argv, sudo)
+    return render_bat(argv, title) if paths.is_windows(platform) else render_shell(argv, sudo)
 
 
 def launcher_text(m: Machine, qemu_dir: str, machine_dir: str,
                   platform: str = paths.HOST_PLATFORM) -> str:
     return render_launcher(build_argv(m, qemu_dir, machine_dir, platform), platform,
-                           needs_sudo(m, platform))
+                           needs_sudo(m, platform), m.name)
 
 
 def write_launcher(m: Machine, qemu_dir: str, machine_dir: str,
@@ -247,7 +267,7 @@ def write_launcher(m: Machine, qemu_dir: str, machine_dir: str,
     import os
     import stat
     argv = build_argv(m, qemu_dir, machine_dir, platform)
-    text = render_launcher(argv, platform, needs_sudo(m, platform))
+    text = render_launcher(argv, platform, needs_sudo(m, platform), m.name)
     path = Path(machine_dir) / paths.launcher_name(platform)
     path.write_text(text, encoding="utf-8", newline="")
     if not paths.is_windows(platform):

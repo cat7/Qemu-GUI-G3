@@ -1016,3 +1016,96 @@ class StartDispatch(unittest.TestCase):
         self.assertIn("t", w.running)
         self.assertNotIn("t", w.terminal_started)
         self.assertTrue(w.run_status.cget("text").startswith("Running"))
+
+
+class WindowsConsoleWindow(unittest.TestCase):
+    """User report 2026-09-23: on Windows a start opened a large, empty
+    console, because the console-subsystem emulator got a default console of
+    its own while all its output went into last-run.log."""
+
+    def _bat(self, name: str = "Mac OS 9") -> str:
+        m = model.new_machine(name, "other")
+        m.rom = "rom.bin"
+        return command.launcher_text(m, r"C:\q", r"C:\m", "win32")
+
+    def test_the_bat_names_sizes_and_holds_its_console(self):
+        text = self._bat()
+        lines = text.split("\r\n")
+        self.assertEqual(lines[0], "@echo off")
+        self.assertIn("title Mac OS 9", lines)
+        self.assertIn("mode con: cols=100 lines=30", lines)
+        self.assertEqual(lines[-2], "if errorlevel 1 pause")
+        self.assertLess(lines.index("mode con: cols=100 lines=30"),
+                        lines.index('cd /d "%~dp0"'))
+
+    def test_a_title_cmd_would_choke_on_is_cleaned_up(self):
+        self.assertEqual(command.bat_title('a & b > c ^ d "e" 100%'), "a  b  c  d e 100")
+        self.assertEqual(command.bat_title(""), command.BAT_TITLE)
+        self.assertEqual(command.bat_title("x" * 60), "x" * 40)
+
+    def test_the_continuation_contract_is_unchanged(self):
+        text = self._bat()
+        body = [ln for ln in text.split("\r\n") if ln.startswith("-")]
+        for ln in body[:-1]:
+            self.assertTrue(ln.endswith(" ^"), ln)
+        self.assertFalse(body[-1].endswith("^"))
+
+    def test_the_posix_launcher_gains_nothing(self):
+        m = model.new_machine("Mac OS 9", "other")
+        m.rom = "rom.bin"
+        text = command.launcher_text(m, "/q", "/m", "darwin")
+        for token in ("mode con", "title ", "pause", "errorlevel"):
+            self.assertNotIn(token, text)
+
+
+class WindowsSpawn(unittest.TestCase):
+    """The console Windows hands out is the one QEMU should print into: the
+    .bat runs in a new console with no redirection. Other hosts are untouched."""
+
+    def setUp(self):
+        from qemugui import ui_main as ui
+        self.ui = ui
+        self.saved = (paths.HOST_PLATFORM, ui.subprocess.Popen)
+        self.td = tempfile.TemporaryDirectory()
+        paths.use_install_dir(self.td.name)
+        self.calls = []
+
+        class FakePopen:
+            pid = 4321
+
+            def __init__(_s, argv, **kw):
+                self.calls.append((argv, kw))
+
+            def poll(_s):
+                return None
+
+        ui.subprocess.Popen = FakePopen
+
+    def tearDown(self):
+        paths.HOST_PLATFORM, self.ui.subprocess.Popen = self.saved
+        paths.use_install_dir(None)
+        self.td.cleanup()
+
+    def _start(self, platform: str):
+        paths.HOST_PLATFORM = platform
+        m = model.new_machine("t", "other")
+        m.rom = "rom.bin"
+        return self.ui.start_machine(m, Path(self.td.name) / "t")
+
+    def test_windows_gets_a_new_console_and_no_redirection(self):
+        run = self._start("win32")
+        argv, kw = self.calls[0]
+        self.assertTrue(str(argv[-1]).endswith("run.bat"), argv)
+        self.assertEqual(kw["creationflags"], self.ui.CREATE_NEW_CONSOLE)
+        self.assertNotIn("stdout", kw)
+        self.assertNotIn("stderr", kw)
+        self.assertIsNone(run.poll())
+        self.assertTrue(run.log_path.read_text().startswith("# "))
+
+    def test_other_hosts_still_redirect_into_the_log(self):
+        run = self._start("linux")
+        self.addCleanup(run._log_fh.close)
+        argv, kw = self.calls[0]
+        self.assertTrue(str(argv[0]).endswith("qemu-system-ppc"), argv)
+        self.assertNotIn("creationflags", kw)
+        self.assertIsNotNone(kw["stdout"])
