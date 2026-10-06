@@ -433,17 +433,37 @@ class MachineEditor(tk.Toplevel):
         self.mac_var = tk.StringVar()
         ttk.Entry(f, textvariable=self.mac_var, width=22).grid(
             row=4, column=1, sticky="w", pady=(6, 0))
-        ttk.Separator(f).grid(row=5, column=0, columnspan=3, sticky="ew", pady=10)
+        ff = ttk.Frame(f)
+        ff.grid(row=5, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        ttk.Label(ff, text="Port forwarding", font=("", 0, "bold")).grid(
+            row=0, column=0, columnspan=5, sticky="w")
+        ttk.Label(ff, text="Host port to guest port, e.g. 8080 -> 80 (slirp only)",
+                  foreground=GREY, wraplength=640, justify="left").grid(
+            row=1, column=0, columnspan=5, sticky="w", pady=(0, 4))
+        for c, t in enumerate(("Protocol", "Host port", "Guest port")):
+            ttk.Label(ff, text=t, foreground=GREY).grid(row=2, column=c, sticky="w", padx=(0, 6))
+        self.fwd_rows = []
+        for i in range(model.HOSTFWD_ROWS):
+            proto = tk.StringVar(value="tcp")
+            hp, gp = tk.StringVar(), tk.StringVar()
+            w = [ttk.Combobox(ff, textvariable=proto, state="readonly", width=5,
+                              values=list(model.HOSTFWD_PROTOS)),
+                 ttk.Entry(ff, textvariable=hp, width=8),
+                 ttk.Entry(ff, textvariable=gp, width=8)]
+            for c, x in enumerate(w):
+                x.grid(row=3 + i, column=c, sticky="w", padx=(0, 6), pady=1)
+            self.fwd_rows.append((proto, hp, gp, w))
+        ttk.Separator(f).grid(row=6, column=0, columnspan=3, sticky="ew", pady=10)
         ttk.Label(f, text="Sound interface", font=("", 0, "bold")).grid(
-            row=6, column=0, columnspan=3, sticky="w", pady=(0, 4))
+            row=7, column=0, columnspan=3, sticky="w", pady=(0, 4))
         self.audio_var = tk.StringVar(value="default")
         self.audio_default_rb = ttk.Radiobutton(f, text=model.default_audio_label(paths.HOST_PLATFORM),
                                                 variable=self.audio_var, value="default")
-        self.audio_default_rb.grid(row=7, column=0, columnspan=3, sticky="w")
+        self.audio_default_rb.grid(row=8, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(f, text="SDL", variable=self.audio_var, value="sdl").grid(
-            row=8, column=0, columnspan=3, sticky="w")
-        ttk.Radiobutton(f, text="None", variable=self.audio_var, value="none").grid(
             row=9, column=0, columnspan=3, sticky="w")
+        ttk.Radiobutton(f, text="None", variable=self.audio_var, value="none").grid(
+            row=10, column=0, columnspan=3, sticky="w")
 
     def _net_mode_changed(self, _e=None):
         mode = model.network_mode_by_label(self.net_mode.get())
@@ -453,6 +473,10 @@ class MachineEditor(tk.Toplevel):
                 self.ifname_var.set(model.default_ifname(mode, paths.HOST_PLATFORM))
         else:
             self.ifname_entry.config(state="disabled")
+        for *_v, widgets in self.fwd_rows:
+            for i, w in enumerate(widgets):
+                w.config(state=("readonly" if i == 0 else "normal") if mode == "user"
+                         else "disabled")
 
     def _build_share(self):
         f = self._tab("Shared folder")
@@ -553,6 +577,11 @@ class MachineEditor(tk.Toplevel):
         self.net_mode.set(model.network_mode_label(m.network.mode))
         self.mac_var.set(m.network.mac)
         self.ifname_var.set(m.network.ifname)
+        for i, (proto, hp, gp, _w) in enumerate(self.fwd_rows):
+            r = m.network.hostfwd[i] if i < len(m.network.hostfwd) else model.HostFwd()
+            proto.set(r.proto if r.proto in model.HOSTFWD_PROTOS else "tcp")
+            hp.set(r.host_port)
+            gp.set(r.guest_port)
         self._net_mode_changed()
         self.audio_var.set(m.audio)
         self.share_folder_var.set(m.share.folder)
@@ -592,7 +621,9 @@ class MachineEditor(tk.Toplevel):
             m.floppy = None
         mode = model.network_mode_by_label(self.net_mode.get())
         ifname = self.ifname_var.get().strip() if mode in model.NETWORK_MODES_WITH_IFNAME else ""
-        m.network = Network(mode, self.mac_var.get().strip(), ifname)
+        fwd = [model.HostFwd(p.get(), h.get().strip(), g.get().strip())
+               for p, h, g, _w in self.fwd_rows]
+        m.network = Network(mode, self.mac_var.get().strip(), ifname, fwd)
         try:
             mips = int(self.mips_var.get())
         except ValueError:

@@ -599,10 +599,6 @@ class NoOtherPathCanRemoveAFile(unittest.TestCase):
             self.assertNotIn("rmtree", src.read_text(), src.name)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TheSecondScreenIsOptional(unittest.TestCase):
     """The extra card and its ROM are optional, so neither may be complained
     about, and the only card offered is the Rage 128 (user, 2026-09-05)."""
@@ -1109,3 +1105,45 @@ class WindowsSpawn(unittest.TestCase):
         self.assertTrue(str(argv[0]).endswith("qemu-system-ppc"), argv)
         self.assertNotIn("creationflags", kw)
         self.assertIsNotNone(kw["stdout"])
+
+
+@unittest.skipUnless(_tk_available(), "no display")
+class PortForwardRows(unittest.TestCase):
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.roots = []
+
+    def tearDown(self):
+        for r in self.roots:
+            r.destroy()
+        self.td.cleanup()
+
+    def _editor(self, m):
+        import tkinter as tk
+        from qemugui.ui_machine import MachineEditor
+        lib = model.Library(self.td.name)
+        root = tk.Tk(); root.withdraw()
+        self.roots.append(root)
+        ed = MachineEditor(root, m, lib, "/q", on_save=lambda *a: None)
+        ed.withdraw()
+        return ed
+
+    def test_four_rows_load_and_collect_with_values_kept_when_disabled(self):
+        rules = [model.HostFwd("udp", "5353", "53"), model.HostFwd("tcp", "8080", "80")]
+        ed = self._editor(model.Machine(name="t", network=model.Network(
+            "user", model.DEFAULT_MAC, "", rules)))
+        self.assertEqual(len(ed.fwd_rows), 4)
+        self.assertEqual(str(ed.fwd_rows[0][3][1].cget("state")), "normal")
+        ed.net_mode.set(model.network_mode_label("none"))
+        ed._net_mode_changed()
+        self.assertEqual(str(ed.fwd_rows[0][3][1].cget("state")), "disabled")
+        got = [r.to_dict() for r in ed.collect().network.hostfwd if not r.empty]
+        self.assertEqual(got, [r.to_dict() for r in rules])
+        ed.net_mode.set(model.network_mode_label("user"))
+        ed._net_mode_changed()
+        self.assertEqual(str(ed.fwd_rows[3][3][2].cget("state")), "normal")
+
+
+if __name__ == "__main__":
+    unittest.main()
