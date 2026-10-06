@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for Qemu-system-ppc GUI.
+# PyInstaller spec for Qemu-system-ppc G3 rom GUI.
 #
 # Built for distribution by ~/src/createbuild-ppc-universal.command, which
 # runs it with the python.org framework Python (universal2, with tkinter):
@@ -15,8 +15,8 @@
 # tkinter, Apple's /usr/bin/python3 is arm64e and is not redistributable.
 #
 # Put the result into the folder that holds qemu-system-ppc:
-# "dist/Qemu-system-ppc GUI.app" on macOS, the single
-# "dist/Qemu-system-ppc GUI.exe" on Windows. The program works that folder out
+# "dist/Qemu-system-ppc G3 rom GUI.app" on macOS, the single
+# "dist/Qemu-system-ppc G3 rom GUI.exe" on Windows. The program works that folder out
 # itself (paths.resolve_install_dir walks up out of the .app), and keeps
 # Machines/ beside the application, never inside the bundle, which is
 # read-only. The spec file keeps its own name; only the program's name
@@ -54,7 +54,7 @@ if sys.platform == 'win32':
         a.binaries,
         a.datas,
         [],
-        name='Qemu-system-ppc GUI',
+        name='Qemu-system-ppc G3 rom GUI',
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
@@ -67,7 +67,7 @@ else:
         a.scripts,
         [],
         exclude_binaries=True,
-        name='Qemu-system-ppc GUI',
+        name='Qemu-system-ppc G3 rom GUI',
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
@@ -83,16 +83,16 @@ else:
         a.datas,
         strip=False,
         upx=False,
-        name='Qemu-system-ppc GUI',
+        name='Qemu-system-ppc G3 rom GUI',
     )
     app = BUNDLE(
         coll,
-        name='Qemu-system-ppc GUI.app',
+        name='Qemu-system-ppc G3 rom GUI.app',
         icon=None,
         bundle_identifier='org.cat7.qemu-gui',
         info_plist={
-            'CFBundleName': 'Qemu-system-ppc GUI',
-            'CFBundleDisplayName': 'Qemu-system-ppc GUI',
+            'CFBundleName': 'Qemu-system-ppc G3 rom GUI',
+            'CFBundleDisplayName': 'Qemu-system-ppc G3 rom GUI',
             'CFBundleShortVersionString': '1.0',
             'CFBundleVersion': '1.0',
             # Without this the window is drawn at 1x and looks blurred on a

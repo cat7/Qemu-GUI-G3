@@ -16,7 +16,7 @@ import shlex
 from . import paths
 from .model import Machine, detect_format
 
-HEADER_NOTE = "Written by Qemu-system-ppc GUI. Do not edit."
+HEADER_NOTE = "Written by Qemu-system-ppc G3 rom GUI. Do not edit."
 
 AUDIO_DEFAULT = paths.AUDIO_DEFAULT
 

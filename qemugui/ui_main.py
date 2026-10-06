@@ -22,7 +22,7 @@ from .ui_dialogs import (ask_name, confirm_delete,
                          confirm_reset_saved_settings, open_folder)
 from .ui_machine import MachineEditor
 
-APP_TITLE = "Qemu-system-ppc GUI"
+APP_TITLE = "Qemu-system-ppc G3 rom GUI"
 
 # The emulator's own output goes into the machine's folder.
 LOG_NAME = "last-run.log"

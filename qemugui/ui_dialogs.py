@@ -175,5 +175,5 @@ def open_folder(path: Path) -> None:
         else:
             subprocess.Popen(["xdg-open", str(path)])
     except OSError as e:
-        messagebox.showerror("Qemu-system-ppc GUI",
+        messagebox.showerror("Qemu-system-ppc G3 rom GUI",
                              f"That folder could not be opened.\n\n{e}")

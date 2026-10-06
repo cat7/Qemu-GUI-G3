@@ -2,7 +2,7 @@
 beside it, and the Machines folder beside it.
 
 There is no configurable QEMU folder and no configurable machine library.
-Qemu-system-ppc GUI is a companion to one copy of ``qemu-system-ppc``: it lives in the
+Qemu-system-ppc G3 rom GUI is a companion to one copy of ``qemu-system-ppc``: it lives in the
 same folder as that program, and keeps its machines in a ``Machines`` folder
 next to itself.
 
@@ -18,7 +18,7 @@ import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 
-APP_NAME = "Qemu-system-ppc GUI"
+APP_NAME = "Qemu-system-ppc G3 rom GUI"
 HOST_PLATFORM = sys.platform  # "darwin" | "win32" | "linux"
 
 MACHINES_DIR_NAME = "Machines"
@@ -44,7 +44,7 @@ def resolve_install_dir(*, frozen: bool, executable: str, source_root: str) -> P
 
     * running from source -- the folder holding ``qemu_gui.py``;
     * frozen inside a macOS application bundle -- ``sys.executable`` is
-      ``.../Qemu-system-ppc GUI.app/Contents/MacOS/Qemu-system-ppc GUI``, several levels below the
+      ``.../Qemu-system-ppc G3 rom GUI.app/Contents/MacOS/Qemu-system-ppc G3 rom GUI``, several levels below the
       folder the bundle itself sits in, so walk up out of the ``.app``;
     * frozen as a plain executable (Windows, Linux) -- the folder holding
       the executable.

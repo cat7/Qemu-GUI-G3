@@ -43,20 +43,20 @@ class InstallDir(unittest.TestCase):
         bundle. The folder a person sees is the one holding the .app."""
         got = paths.resolve_install_dir(
             frozen=True,
-            executable="/Applications/qemu-g3/Qemu-system-ppc GUI.app/Contents/MacOS/Qemu-system-ppc GUI",
+            executable="/Applications/qemu-g3/Qemu-system-ppc G3 rom GUI.app/Contents/MacOS/Qemu-system-ppc G3 rom GUI",
             source_root="/nowhere")
         self.assertEqual(got, Path("/Applications/qemu-g3"))
 
     def test_frozen_bundle_nested_deeper(self):
         got = paths.resolve_install_dir(
             frozen=True,
-            executable="/path/to/qemu/Qemu-system-ppc GUI.app/Contents/MacOS/sub/Qemu-system-ppc GUI",
+            executable="/path/to/qemu/Qemu-system-ppc G3 rom GUI.app/Contents/MacOS/sub/Qemu-system-ppc G3 rom GUI",
             source_root="/nowhere")
         self.assertEqual(got, Path("/path/to/qemu"))
 
     def test_frozen_windows_executable(self):
         got = paths.resolve_install_dir(frozen=True,
-                                        executable="/c/qemu-g3/Qemu-system-ppc GUI.exe",
+                                        executable="/c/qemu-g3/Qemu-system-ppc G3 rom GUI.exe",
                                         source_root="/nowhere")
         self.assertEqual(got, Path("/c/qemu-g3"))
 
@@ -97,7 +97,7 @@ class FrozenBundle(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.TemporaryDirectory()
         self.install = Path(self.td.name).resolve()
-        exe = self.install / "Qemu-system-ppc GUI.app" / "Contents" / "MacOS" / "Qemu-system-ppc GUI"
+        exe = self.install / "Qemu-system-ppc G3 rom GUI.app" / "Contents" / "MacOS" / "Qemu-system-ppc G3 rom GUI"
         exe.parent.mkdir(parents=True)
         exe.write_text("")
         binary = self.install / paths.qemu_binary_name()
@@ -124,8 +124,8 @@ class FrozenBundle(unittest.TestCase):
         self.assertIsNone(paths.startup_problem())
         self.assertTrue((self.install / "Machines").is_dir())
         # nothing was written inside the bundle
-        self.assertEqual(sorted(p.name for p in (self.install / "Qemu-system-ppc GUI.app").rglob("*")),
-                         ["Contents", "MacOS", "Qemu-system-ppc GUI"])
+        self.assertEqual(sorted(p.name for p in (self.install / "Qemu-system-ppc G3 rom GUI.app").rglob("*")),
+                         ["Contents", "MacOS", "Qemu-system-ppc G3 rom GUI"])
 
     def test_a_frozen_bundle_without_the_emulator_still_refuses(self):
         (self.install / paths.qemu_binary_name()).unlink()

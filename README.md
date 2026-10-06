@@ -1,4 +1,4 @@
-# Qemu-system-ppc GUI
+# Qemu-system-ppc G3 rom GUI
 
 A portable launcher for the `g3beige` machine (beige Power Mac G3) of the
 `g3beige` branch of `qemu-system-ppc` (github.com/cat7/qemu). Needs a real
@@ -25,7 +25,7 @@ and not redistributable):
     /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13 \
         -m PyInstaller --noconfirm QemuGUI.spec
 
-Result: `dist/Qemu-system-ppc GUI.app`. Put it in the folder that holds
+Result: `dist/Qemu-system-ppc G3 rom GUI.app`. Put it in the folder that holds
 `qemu-system-ppc`. For a build that runs only on the building machine's
 architecture, prefix the command with `QEMUGUI_TARGET_ARCH=arm64` (or
 `x86_64`).
@@ -42,7 +42,7 @@ a password, and use the host's own address.
     pyinstaller --noconfirm QemuGUI.spec
 
 `QemuGUI.spec` targets `universal2` only on macOS; on Windows it produces a
-single windowed executable, `dist/Qemu-system-ppc GUI.exe`. Put it
+single windowed executable, `dist/Qemu-system-ppc G3 rom GUI.exe`. Put it
 alongside `qemu-system-ppc.exe`.
 
 ## Tests

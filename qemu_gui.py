@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Qemu-system-ppc GUI: start an emulated PowerMac G3.
+"""Qemu-system-ppc G3 rom GUI: start an emulated PowerMac G3.
 
 Runs from the folder that holds qemu-system-ppc; machines live in a
 "Machines" folder next to it. Standard library only (tkinter).
@@ -34,7 +34,7 @@ def report_problem_on_screen(message: str) -> None:
     try:
         root = tk.Tk()
         root.withdraw()
-        messagebox.showerror("Qemu-system-ppc GUI", message)
+        messagebox.showerror("Qemu-system-ppc G3 rom GUI", message)
         root.destroy()
     except Exception:      # no display: the terminal message stands
         pass

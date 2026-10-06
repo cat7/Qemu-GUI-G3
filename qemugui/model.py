@@ -116,7 +116,7 @@ SECOND_GPU_EXPERIMENTAL = ("ati-vga", "VGA", "cirrus-vga")
 # QEMU writes these two into the machine folder on every run.
 SAVED_SETTINGS_FILES = ("nvram.img", "pram.img")
 
-# The complete list of files Qemu-system-ppc GUI is allowed to delete from a machine
+# The complete list of files Qemu-system-ppc G3 rom GUI is allowed to delete from a machine
 # folder. Anything not on this list -- above all a disk image -- is left
 # alone, whatever it is called. This list is the whole safety story: it is
 # an allow-list, not a deny-list, so a new kind of file is safe by default.
@@ -799,7 +799,7 @@ def check_new_image_path(folder: Path | str, name: str, fmt: str) -> tuple[Path 
 
     Refusing to write over anything that already exists is the point of this
     function: a disk image can be a whole afternoon of installing an old
-    system, and Qemu-system-ppc GUI never overwrites one.
+    system, and Qemu-system-ppc G3 rom GUI never overwrites one.
     """
     name = (name or "").strip()
     if not name:
