@@ -437,7 +437,7 @@ class MachineEditor(tk.Toplevel):
         ff.grid(row=5, column=0, columnspan=3, sticky="w", pady=(10, 0))
         ttk.Label(ff, text="Port forwarding", font=("", 0, "bold")).grid(
             row=0, column=0, columnspan=5, sticky="w")
-        ttk.Label(ff, text="Host port to guest port, e.g. 8080 -> 80 (slirp only)",
+        ttk.Label(ff, text="Slirp only; host ports below 1024 start with sudo",
                   foreground=GREY, wraplength=640, justify="left").grid(
             row=1, column=0, columnspan=5, sticky="w", pady=(0, 4))
         for c, t in enumerate(("Protocol", "Host port", "Guest port")):

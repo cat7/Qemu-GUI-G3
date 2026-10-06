@@ -89,8 +89,8 @@ def drive_format(stored: str, file: str, base: str) -> str:
 
 
 def needs_sudo(m: Machine, platform: str = paths.HOST_PLATFORM) -> bool:
-    """vmnet-* launchers run the binary under sudo (macOS only; never in a .bat)."""
-    return m.network.needs_sudo and not paths.is_windows(platform)
+    """vmnet-* and low slirp forward ports run the binary under sudo (macOS only; never in a .bat)."""
+    return (m.network.needs_sudo or m.network.low_host_port) and not paths.is_windows(platform)
 
 
 def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
