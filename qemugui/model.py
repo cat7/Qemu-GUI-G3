@@ -61,6 +61,9 @@ SCSI_SELF_LABEL = "Macintosh"
 
 DRIVE_KINDS = ("disk", "cdrom")
 FORMATS = ("raw", "qcow2")
+# What a drive row can name: dmg and cue are read-only sources QEMU opens
+# itself, never something a new disk is created as.
+DRIVE_FORMATS = FORMATS + ("dmg", "cue")
 
 # QEMU probes an image by its magic number; do the same, so an existing file
 # picked in the editor is described correctly instead of always as "raw".
@@ -68,7 +71,7 @@ FORMAT_MAGIC = ((b"QFI\xfb", "qcow2"),
                 (b"KDMV", "vmdk"),
                 (b"conectix", "vpc"),
                 (b"<<< Oracle VM VirtualBox Disk Image", "vdi"))
-FORMAT_BY_SUFFIX = {".qcow2": "qcow2", ".qcow": "qcow2", ".vmdk": "vmdk",
+FORMAT_BY_SUFFIX = {".dmg": "dmg", ".cue": "cue", ".qcow2": "qcow2", ".qcow": "qcow2", ".vmdk": "vmdk",
                     ".vdi": "vdi", ".vhd": "vpc", ".vhdx": "vpc"}
 MAGIC_LENGTH = max(len(magic) for magic, _ in FORMAT_MAGIC)
 
@@ -91,7 +94,7 @@ def detect_format(path: str) -> str:
         if head.startswith(magic):
             name = fmt
             break
-    return name if name in FORMATS else "raw"
+    return name if name in DRIVE_FORMATS else "raw"
 
 DISPLAYS = {"darwin": ("cocoa", "sdl"), "win32": ("sdl", "gtk"), "linux": ("sdl", "gtk")}
 
@@ -127,6 +130,12 @@ OWNED_FILES = ("machine.json", "run.command", "run.bat", "last-run.log",
 # deleted or kept on the strength of an extension.
 IMAGE_SUFFIXES = {".img", ".dsk", ".qcow2", ".iso", ".toast", ".cdr", ".dmg",
                   ".hfv", ".hfs", ".vmdk", ".raw"}
+
+
+def host_drives(m: "Machine") -> list[str]:
+    """The host optical drives the machine's CD slots name, in slot order."""
+    return [d.file.strip() for d in list(m.ata) + list(m.scsi)
+            if d and d.kind == "cdrom" and paths.is_host_drive(d.file)]
 
 
 def looks_like_disk_image(name: str) -> bool:
@@ -393,6 +402,7 @@ class Machine:
     display: str = "cocoa"
     vnc: str = ""                 # "" = off; else a -vnc display spec, e.g. ":1"
     audio: str = "default"
+    cd_audio: bool = True         # IDE CDs play audio discs out of the sound backend
     onboard_romfile: str | None = None
     second_gpu: SecondGpu | None = None
     network: Network = field(default_factory=Network)
@@ -416,6 +426,7 @@ class Machine:
             "display": self.display,
             "vnc": self.vnc,
             "audio": self.audio,
+            "cd_audio": self.cd_audio,
             "onboard_romfile": self.onboard_romfile,
             "second_gpu": self.second_gpu.to_dict() if self.second_gpu else None,
             "network": self.network.to_dict(),
@@ -446,6 +457,7 @@ class Machine:
             display=str(d.get("display") or default_display()),
             vnc=str(d.get("vnc", "") or ""),
             audio=str(d.get("audio", "default")),
+            cd_audio=bool(d.get("cd_audio", True)),
             onboard_romfile=(str(d["onboard_romfile"]) if d.get("onboard_romfile") else None),
             second_gpu=SecondGpu.from_dict(d.get("second_gpu")),
             network=Network.from_dict(d.get("network")),
@@ -658,10 +670,11 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
 
 def _image_files(m: Machine):
     for i, d in enumerate(m.ata):
-        if d:
+        if d and not paths.is_host_drive(d.file):
             yield ata_slot_name(i), d.file
     for s in m.scsi:
-        yield scsi_name(s.id), s.file
+        if not (s.kind == "cdrom" and paths.is_host_drive(s.file)):
+            yield scsi_name(s.id), s.file
     if m.floppy:
         yield "The floppy disk", m.floppy.file
 
@@ -878,9 +891,10 @@ def _repoint_images(m: Machine, moved: list[tuple[Path, Path]]) -> None:
         return p
 
     for d in m.ata:
-        if d:
+        if d and not paths.is_host_drive(d.file):
             d.file = fixed(d.file)
     for s in m.scsi:
-        s.file = fixed(s.file)
+        if not (s.kind == "cdrom" and paths.is_host_drive(s.file)):
+            s.file = fixed(s.file)
     if m.floppy:
         m.floppy.file = fixed(m.floppy.file)

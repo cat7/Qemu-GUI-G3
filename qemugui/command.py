@@ -88,6 +88,67 @@ def drive_format(stored: str, file: str, base: str) -> str:
     return detect_format(path)
 
 
+CD_AUDIODEV = "cdaudio"
+
+
+def host_drive_option(file: str, platform: str = paths.HOST_PLATFORM) -> str:
+    """The -drive source naming the host drive. A record QEMU on this
+    platform cannot name a drive by goes to the first optical drive."""
+    f = (file or "").strip()
+    if paths.is_windows(platform):
+        letter = paths.drive_letter(f)
+        return f"driver=host_cdrom,drive={letter}:" if letter else \
+            "driver=host_cdrom,filename=/dev/cdrom"
+    if f.startswith(paths.DRIVE_PREFIX):
+        return f"driver=host_cdrom,drive={qopt(f[len(paths.DRIVE_PREFIX):])}"
+    return "driver=host_cdrom,filename=/dev/cdrom"
+
+
+def _has_cd(m: Machine) -> bool:
+    return any(d and d.file and d.kind == "cdrom" for d in m.ata)
+
+
+def _ata_args(index: int, d, machine_dir: str, m: Machine, platform: str) -> list[str]:
+    """-drive (and, for a CD that needs one, -device) for IDE position *index*.
+    A CD with sound out, or a host drive, goes through -device ide-cd on the
+    position's own bus and unit; a plain image keeps the -drive index= form."""
+    host = d.kind == "cdrom" and paths.is_host_drive(d.file)
+    fmt = "raw" if host else drive_format(d.format, d.file, machine_dir)
+    name = "" if host else _path(d.file, machine_dir, platform)
+    if d.kind != "cdrom":
+        extra = ",snapshot=on" if fmt == "dmg" else ""
+        return ["-drive", f"file={qopt(name)},format={fmt},media=disk,index={index}{extra}"]
+    tail = ",readonly=on" if fmt == "dmg" else ""
+    if not host and not m.cd_audio:
+        return ["-drive", f"file={qopt(name)},format={fmt},media=cdrom,index={index}{tail}"]
+    drive_id = f"cd{index}"
+    src = host_drive_option(d.file, platform) if host else f"file={qopt(name)},format={fmt}"
+    dev = f"ide-cd,drive={drive_id},bus=ide.{index // 2},unit={index % 2}"
+    if m.cd_audio:
+        dev += f",audiodev={CD_AUDIODEV}"
+    return ["-drive", f"if=none,id={drive_id},{src},media=cdrom{tail}", "-device", dev]
+
+
+def _scsi_args(s, machine_dir: str, platform: str) -> list[str]:
+    """-drive and -device for a SCSI position. scsi-cd has no audiodev."""
+    cd = s.kind == "cdrom"
+    host = cd and paths.is_host_drive(s.file)
+    fmt = "raw" if host else drive_format(s.format, s.file, machine_dir)
+    drive_id = f"{'scd' if cd else 'shd'}{s.id}"
+    if host:
+        src = f"{host_drive_option(s.file, platform)},media=cdrom"
+    else:
+        src = f"file={qopt(_path(s.file, machine_dir, platform))},format={fmt}"
+    if fmt == "dmg":
+        src += ",readonly=on" if cd else ",snapshot=on"
+    tok = f"{'scsi-cd' if cd else 'scsi-hd'},drive={drive_id},scsi-id={s.id}"
+    if s.identity:
+        ident = s.identity
+        tok += (f",vendor={qopt(ident.vendor)},product={qopt(ident.product)},"
+                f"ver={qopt(ident.ver)}")
+    return ["-drive", f"{src},if=none,id={drive_id}", "-device", tok]
+
+
 def needs_sudo(m: Machine, platform: str = paths.HOST_PLATFORM) -> bool:
     """vmnet-* and low slirp forward ports run the binary under sudo (macOS only; never in a .bat)."""
     return (m.network.needs_sudo or m.network.low_host_port) and not paths.is_windows(platform)
@@ -123,6 +184,10 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
     audio = paths.resolve_audio(m.audio, platform)
     argv += ["-audiodev", f"{audio},id=snd", "-global", "awacs.audiodev=snd"]
 
+    if m.cd_audio and _has_cd(m):
+        # Own backend: a shared one is pinned at zero by the Screamer's idle voice.
+        argv += ["-audiodev", f"{audio},id={CD_AUDIODEV}"]
+
     if m.onboard_romfile:
         argv += ["-global", f"ati-mach64-gt.romfile={qopt(_path(m.onboard_romfile, qd, platform))}"]
 
@@ -139,26 +204,12 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
     for index, d in enumerate(m.ata):
         if d is None or not d.file:
             continue  # empty slot, or a seeded slot with no image yet
-        media = "cdrom" if d.kind == "cdrom" else "disk"
-        argv += ["-drive", f"file={qopt(_path(d.file, machine_dir, platform))},"
-                           f"format={drive_format(d.format, d.file, machine_dir)},"
-                           f"media={media},index={index}"]
+        argv += _ata_args(index, d, machine_dir, m, platform)
 
     for s in sorted(m.scsi, key=lambda x: x.id):
         if not s.file:
             continue
-        prefix = "scd" if s.kind == "cdrom" else "shd"
-        drive_id = f"{prefix}{s.id}"
-        dev = "scsi-cd" if s.kind == "cdrom" else "scsi-hd"
-        argv += ["-drive", f"file={qopt(_path(s.file, machine_dir, platform))},"
-                           f"format={drive_format(s.format, s.file, machine_dir)},"
-                           f"if=none,id={drive_id}"]
-        tok = f"{dev},drive={drive_id},scsi-id={s.id}"
-        if s.identity:
-            ident = s.identity
-            tok += (f",vendor={qopt(ident.vendor)},product={qopt(ident.product)},"
-                    f"ver={qopt(ident.ver)}")
-        argv += ["-device", tok]
+        argv += _scsi_args(s, machine_dir, platform)
 
     if m.floppy and m.floppy.file:
         argv += ["-drive", f"if=none,id=fd,file={qopt(_path(m.floppy.file, machine_dir, platform))},"

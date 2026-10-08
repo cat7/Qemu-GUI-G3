@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
@@ -133,6 +134,29 @@ def join_path(base: str, name: str, platform: str = HOST_PLATFORM) -> str:
     if n.is_absolute():
         return str(n)
     return str(pure_path(base, platform) / n)
+
+
+HOST_DRIVE_RE = re.compile(r"^(/dev/\S+|(\\\\\.\\)?[A-Za-z]:\\?)$")
+
+# A CD slot names a host optical DRIVE, not a disc: "drive:<vendor product>"
+# on macOS, the drive letter on Windows. Records from before that hold the
+# disc's /dev/diskN; they follow the first optical drive.
+DRIVE_PREFIX = "drive:"
+
+
+def is_host_drive(file: str) -> bool:
+    """A drive entry that names a host optical drive (drive:<name>, D:, or
+    an old /dev/diskN) rather than an image file."""
+    f = (file or "").strip()
+    return f.startswith(DRIVE_PREFIX) and len(f) > len(DRIVE_PREFIX) or \
+        bool(HOST_DRIVE_RE.match(f))
+
+
+def drive_letter(file: str) -> str:
+    """D from "D:", "d:\\" or "\\\\.\\D:"; "" if *file* is not a letter."""
+    f = (file or "").strip()
+    m = re.fullmatch(r"(?:\\\\\.\\)?([A-Za-z]):\\?", f)
+    return m.group(1).upper() if m else ""
 
 
 def browse_start_dir(current: str | None, fallback: Path | str | None = None) -> Path:

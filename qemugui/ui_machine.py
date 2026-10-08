@@ -19,15 +19,15 @@ from . import model, paths
 from .model import (Machine, AtaDrive, ScsiDrive, Identity, Floppy, SecondGpu, Network,
                     Governor, Share)
 from .systems import SYSTEMS, system_labels, system_by_label
-from .ui_dialogs import show_validation, CreateDiskDialog
+from .ui_dialogs import show_validation, CreateDiskDialog, HostDriveDialog
 
 KIND_LABELS = {"": "Empty", "disk": "Hard disk", "cdrom": "CD"}
 KIND_BY_LABEL = {v: k for k, v in KIND_LABELS.items()}
-IMAGE_TYPES = [("Hard disks and CDs", "*.img *.dsk *.qcow2 *.iso *.toast *.cdr"),
+IMAGE_TYPES = [("Hard disks and CDs", "*.img *.dsk *.qcow2 *.iso *.toast *.cdr *.dmg *.cue"),
                ("Every file", "*")]
 ROM_TYPES = [("ROM files", "*.rom *.ROM *.bin"), ("Every file", "*")]
 FLOPPY_TYPES = [("Floppy disks", "*.img *.dsk"), ("Every file", "*")]
-CDROM_EXTS = {".iso", ".toast", ".cdr", ".dmg"}
+CDROM_EXTS = {".iso", ".toast", ".cdr", ".dmg", ".cue"}
 
 GREY = "gray"
 
@@ -95,8 +95,11 @@ class DriveRow:
                                  fallback=fallback, on_pick=self._file_picked)
         self.picker.grid(row=row, column=2, sticky="ew", padx=2, pady=1)
         self.file.trace_add("write", lambda *_a: self._infer_kind())
-        ttk.Combobox(master, textvariable=self.format, values=model.FORMATS, state="readonly",
+        ttk.Combobox(master, textvariable=self.format, values=model.DRIVE_FORMATS, state="readonly",
                      width=6).grid(row=row, column=3, padx=2)
+        ttk.Button(master, text="Host drive…", width=11,
+                   command=self._pick_host_drive).grid(row=row, column=8 if scsi else 4,
+                                                       padx=(6, 0))
         if scsi:
             self.send_identity = tk.BooleanVar(value=False)
             self.vendor = tk.StringVar()
@@ -106,6 +109,13 @@ class DriveRow:
             ttk.Entry(master, textvariable=self.vendor, width=7).grid(row=row, column=5, padx=1)
             ttk.Entry(master, textvariable=self.product, width=12).grid(row=row, column=6, padx=1)
             ttk.Entry(master, textvariable=self.ver, width=4).grid(row=row, column=7, padx=1)
+
+    def _pick_host_drive(self):
+        dlg = HostDriveDialog(self.picker.entry.winfo_toplevel(), current=self.file.get())
+        if dlg.result:
+            self.kind.set(KIND_LABELS["cdrom"])
+            self.file.set(dlg.result)
+            self.format.set("raw")
 
     def _file_picked(self, path: str):
         """Only a file chosen through the dialog re-detects the format, so a
@@ -358,12 +368,15 @@ class MachineEditor(tk.Toplevel):
         ata = ttk.Frame(f)
         ata.grid(row=r, column=0, sticky="ew")
         ata.columnconfigure(2, weight=1)
-        for c, h in enumerate(("Position", "", "", "Format")):
+        for c, h in enumerate(("Position", "", "", "Format", "")):
             ttk.Label(ata, text=h, foreground=GREY).grid(row=0, column=c, sticky="w", padx=4)
         self.ata_rows = [DriveRow(ata, 1 + i,
                                   model.ata_slot_name(i), scsi=False,
                                   fallback=self.machine_folder)
                          for i in range(len(model.ATA_SLOTS))]
+        r += 1
+        ttk.Label(f, text="A .dmg hard disk is read only.", foreground=GREY).grid(
+            row=r, column=0, sticky="w", padx=4, pady=(6, 0))
         r += 1
         have_img = paths.qemu_img_binary().is_file()
         ttk.Button(f, text="Create new disk image…", command=self._create_disk,
@@ -381,7 +394,7 @@ class MachineEditor(tk.Toplevel):
         scsi = ttk.Frame(f)
         scsi.grid(row=r, column=0, sticky="ew")
         scsi.columnconfigure(2, weight=1)
-        for c, h in enumerate(("Device", "", "", "Format", "Pretend", "Make", "Model", "Version")):
+        for c, h in enumerate(("Device", "", "", "Format", "Pretend", "Make", "Model", "Version", "")):
             ttk.Label(scsi, text=h, foreground=GREY).grid(row=0, column=c, sticky="w", padx=4)
         self.scsi_rows = [DriveRow(scsi, sid + 1, model.scsi_name(sid), scsi=True,
                                    fallback=self.machine_folder)
@@ -464,6 +477,12 @@ class MachineEditor(tk.Toplevel):
             row=9, column=0, columnspan=3, sticky="w")
         ttk.Radiobutton(f, text="None", variable=self.audio_var, value="none").grid(
             row=10, column=0, columnspan=3, sticky="w")
+        ttk.Separator(f).grid(row=11, column=0, columnspan=3, sticky="ew", pady=10)
+        ttk.Label(f, text="CD", font=("", 0, "bold")).grid(
+            row=12, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        self.cd_audio_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(f, text="CD audio out (IDE CD drives)",
+                        variable=self.cd_audio_var).grid(row=13, column=0, columnspan=3, sticky="w")
 
     def _net_mode_changed(self, _e=None):
         mode = model.network_mode_by_label(self.net_mode.get())
@@ -584,6 +603,7 @@ class MachineEditor(tk.Toplevel):
             gp.set(r.guest_port)
         self._net_mode_changed()
         self.audio_var.set(m.audio)
+        self.cd_audio_var.set(m.cd_audio)
         self.share_folder_var.set(m.share.folder)
         self.share_user_var.set(m.share.user)
         self.share_password_var.set(m.share.password)
@@ -630,6 +650,7 @@ class MachineEditor(tk.Toplevel):
             mips = 0
         m.governor = Governor(self.gov_mode.get(), mips)
         m.audio = self.audio_var.get()
+        m.cd_audio = self.cd_audio_var.get()
         m.share = Share(self.share_folder_var.get().strip(), self.share_user_var.get().strip(),
                         self.share_password_var.get(), self.share_scope.get())
         m.extra_args = self.extra_var.get().strip()
