@@ -14,7 +14,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk, messagebox
 
-from . import command, model, paths, share
+from . import command, midi, model, paths, share
 from .model import Machine, Library
 from .paths import Settings
 from .systems import SYSTEMS, system_ids
@@ -40,7 +40,8 @@ def qemu_dir() -> str:
 
 class RunningMachine:
     def __init__(self, name: str, proc: subprocess.Popen, log_path: Path, argv: list[str], log_fh,
-                 share_server: share.ShareServer | None = None):
+                 share_server: share.ShareServer | None = None,
+                 midi_bridge: midi.Bridge | None = None):
         self.name = name
         self.proc = proc
         self.log_path = log_path
@@ -48,6 +49,7 @@ class RunningMachine:
         self.started = time.time()
         self._log_fh = log_fh
         self.share = share_server
+        self.midi = midi_bridge
         self.exit_code: int | None = None
 
     @property
@@ -61,6 +63,9 @@ class RunningMachine:
             if self.share:
                 self.share.stop()
                 self.share = None
+            if self.midi:
+                self.midi.stop()
+                self.midi = None
             try:
                 if self._log_fh:
                     self._log_fh.close()
@@ -75,7 +80,14 @@ class RunningMachine:
 TERMINAL_STATUS = "Started in Terminal"
 
 
-def start_in_terminal(m: Machine, machine_dir: Path) -> tuple[Path, share.ShareServer | None]:
+def start_midi(m: Machine) -> midi.Bridge | None:
+    if not m.midi.enabled or not (m.midi.output or m.midi.input):
+        return None
+    return midi.Bridge(m.midi.port, m.midi.output, m.midi.input).start()
+
+
+def start_in_terminal(m: Machine, machine_dir: Path
+                      ) -> tuple[Path, share.ShareServer | None, midi.Bridge | None]:
     """On macOS a QEMU child of this application runs with reduced display
     performance and without microphone access; a Terminal-launched run has
     neither problem, and Terminal is also the only place a vmnet run can ask
@@ -91,7 +103,7 @@ def start_in_terminal(m: Machine, machine_dir: Path) -> tuple[Path, share.ShareS
         if share_server:
             share_server.stop()
         raise
-    return launcher, share_server
+    return launcher, share_server, start_midi(m)
 
 
 def start_machine(m: Machine, machine_dir: Path) -> RunningMachine:
@@ -129,7 +141,7 @@ def start_machine(m: Machine, machine_dir: Path) -> RunningMachine:
         if log_fh:
             log_fh.close()
         raise
-    return RunningMachine(m.name, proc, log_path, argv, log_fh, share_server)
+    return RunningMachine(m.name, proc, log_path, argv, log_fh, share_server, start_midi(m))
 
 
 class MainWindow(tk.Tk):
@@ -143,6 +155,7 @@ class MainWindow(tk.Tk):
         self.finished: dict[str, RunningMachine] = {}
         self.terminal_started: dict[str, float] = {}
         self.terminal_shares: dict[str, share.ShareServer] = {}
+        self.terminal_midis: dict[str, midi.Bridge] = {}
         self.title(APP_TITLE)
         self.geometry("1100x680")
         self.minsize(880, 520)
@@ -323,13 +336,14 @@ class MainWindow(tk.Tk):
             if name in self.terminal_started:
                 when = time.strftime("%H:%M", time.localtime(self.terminal_started[name]))
                 self.run_status.config(text=f"{TERMINAL_STATUS} ({when})"
-                                       + self._share_line(name, self.terminal_shares.get(name)))
+                                       + self._share_line(name, self.terminal_shares.get(name))
+                                       + self._midi_line(self.terminal_midis.get(name)))
             else:
                 self.run_status.config(text="Not running")
             return
         if r.exit_code is None:
             self.run_status.config(text=f"Running — {self._duration(r.uptime())}"
-                                   + self._share_line(name, r.share))
+                                   + self._share_line(name, r.share) + self._midi_line(r.midi))
         elif r.exit_code == 0:
             self.run_status.config(text=f"Stopped after {self._duration(r.uptime())}")
         else:
@@ -344,6 +358,10 @@ class MainWindow(tk.Tk):
         except (OSError, ValueError, KeyError, TypeError):
             return ""
         return f"\nShared folder: {s.url_for(m.network.mode, m.network.ifname)}"
+
+    @staticmethod
+    def _midi_line(b: midi.Bridge | None) -> str:
+        return f"\nMIDI: {b.status}" if b else ""
 
     @staticmethod
     def _duration(seconds: float) -> str:
@@ -396,6 +414,9 @@ class MainWindow(tk.Tk):
         s = self.terminal_shares.pop(name, None)
         if s:
             s.stop()
+        b = self.terminal_midis.pop(name, None)
+        if b:
+            b.stop()
 
     def edit_machine(self):
         m = self.selected_machine()
@@ -485,7 +506,8 @@ class MainWindow(tk.Tk):
         if paths.HOST_PLATFORM == "darwin":
             self._stop_terminal_share(m.name)
             try:
-                _launcher, share_server = start_in_terminal(m, self.library.folder(m.name))
+                _launcher, share_server, bridge = start_in_terminal(
+                    m, self.library.folder(m.name))
             except share.ShareError as e:
                 messagebox.showerror("Start", f"The shared folder could not be started.\n\n{e}")
                 return None
@@ -494,6 +516,8 @@ class MainWindow(tk.Tk):
                 return None
             if share_server:
                 self.terminal_shares[m.name] = share_server
+            if bridge:
+                self.terminal_midis[m.name] = bridge
             self.terminal_started[m.name] = time.time()
             self.finished.pop(m.name, None)
             self.refresh_list(select=m.name)
@@ -522,7 +546,8 @@ class MainWindow(tk.Tk):
             self.refresh_list()
         else:
             sel = self.selected_name()
-            if sel and (sel in self.running or sel in self.finished):
+            if sel and (sel in self.running or sel in self.finished
+                        or sel in self.terminal_midis):
                 self._refresh_run_status(sel)
         self.after(1000, self._poll)
 
@@ -545,4 +570,6 @@ class MainWindow(tk.Tk):
         for r in self.running.values():
             if r.share:
                 r.share.stop()
+            if r.midi:
+                r.midi.stop()
         self.destroy()

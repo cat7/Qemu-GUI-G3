@@ -365,6 +365,7 @@ class Governor:
 
 SHARE_SCOPES = ("guest-only", "all-interfaces")
 SHARE_DEFAULT_USER = "guest"
+MIDI_DEFAULT_PORT = 1234
 
 
 @dataclass
@@ -393,6 +394,32 @@ class Share:
 
 
 @dataclass
+class Midi:
+    """MIDI between the guest's modem port and host MIDI devices while it
+    runs -- see midi.py. Devices are kept by name: their numbers change as
+    others come and go."""
+    enabled: bool = False
+    port: int = MIDI_DEFAULT_PORT
+    output: str = ""             # "" = none
+    input: str = ""
+
+    def to_dict(self) -> dict:
+        return {"enabled": self.enabled, "port": self.port, "output": self.output,
+                "input": self.input}
+
+    @classmethod
+    def from_dict(cls, d: Any) -> "Midi":
+        if not isinstance(d, dict):
+            return cls()
+        try:
+            port = int(d.get("port", MIDI_DEFAULT_PORT))
+        except (TypeError, ValueError):
+            port = MIDI_DEFAULT_PORT
+        return cls(bool(d.get("enabled", False)), port, str(d.get("output", "") or ""),
+                   str(d.get("input", "") or ""))
+
+
+@dataclass
 class Machine:
     name: str = "New machine"
     system: str = "other"
@@ -411,6 +438,7 @@ class Machine:
     scsi: list = field(default_factory=list)
     floppy: Floppy | None = None
     share: Share = field(default_factory=Share)
+    midi: Midi = field(default_factory=Midi)
     extra_args: str = ""
     notes: str = ""
 
@@ -435,6 +463,7 @@ class Machine:
             "scsi": [d.to_dict() for d in sorted(self.scsi, key=lambda s: s.id)],
             "floppy": self.floppy.to_dict() if self.floppy else None,
             "share": self.share.to_dict(),
+            "midi": self.midi.to_dict(),
             "extra_args": self.extra_args,
             "notes": self.notes,
         }
@@ -466,6 +495,7 @@ class Machine:
             scsi=scsi,
             floppy=Floppy.from_dict(d.get("floppy")),
             share=Share.from_dict(d.get("share")),
+            midi=Midi.from_dict(d.get("midi")),
             extra_args=str(d.get("extra_args", "")),
             notes=str(d.get("notes", "")),
         )
@@ -608,6 +638,14 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
     if m.second_gpu:
         if m.second_gpu.addr and not ADDR_RE.match(m.second_gpu.addr):
             errors.append("The card slot has to look like 0x0e.")
+    if m.midi.enabled:
+        if not 1024 <= m.midi.port <= 65535:
+            errors.append("The MIDI port has to be between 1024 and 65535.")
+        if not m.midi.output and not m.midi.input:
+            warnings.append("MIDI is on but has no MIDI device chosen.")
+        if any(r.host_port.strip() == str(m.midi.port) for r in m.network.hostfwd
+               if r.proto == "tcp"):
+            errors.append(f"Port {m.midi.port} is used both for MIDI and for port forwarding.")
     share = m.share
     if share.scope not in SHARE_SCOPES:
         errors.append(f"'{share.scope}' is not a sharing setting.")
