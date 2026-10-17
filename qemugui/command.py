@@ -14,7 +14,7 @@ import os
 import shlex
 
 from . import paths
-from .model import Machine, detect_format
+from .model import Machine, VIRTIO_9P_ROM, detect_format
 
 HEADER_NOTE = "Written by Qemu-system-ppc G3 rom GUI. Do not edit."
 
@@ -22,6 +22,34 @@ AUDIO_DEFAULT = paths.AUDIO_DEFAULT
 
 # Next to the binary; VNC loads its keyboard layout from <here>/keymaps.
 PC_BIOS_DIR = "pc-bios"
+
+# The G3 ROM only probes the three real slots, A1/B1/C1.
+NINEP_FSDEV = "hostshare"
+NINEP_SLOTS = (0x0d, 0x0f, 0x0e)
+
+
+def _slot(addr: str) -> int | None:
+    try:
+        return int(addr.split(".")[0], 0)
+    except ValueError:
+        return None
+
+
+def ninep_slot(m: Machine) -> str:
+    """A real slot the second graphics card does not use."""
+    taken = _slot(m.second_gpu.addr) if m.second_gpu and m.second_gpu.device else None
+    return "0x%02x" % next(s for s in NINEP_SLOTS if s != taken)
+
+
+def ninep_args(m: Machine, qd: str, platform: str) -> list[str]:
+    """The shared folder as a Mac OS volume (needs Mac OS 8.6 or later)."""
+    folder = os.path.expanduser(m.share.folder.strip())
+    return ["-fsdev", f"local,id={NINEP_FSDEV},path={qopt(folder)},"
+                      "security_model=none,macos_compat=on",
+            "-device", f"virtio-9p-pci,fsdev={NINEP_FSDEV},"
+                       f"mount_tag={qopt(m.share.volume_name.strip())},"
+                       f"romfile={qopt(_path(VIRTIO_9P_ROM, qd, platform))},"
+                       f"addr={ninep_slot(m)}"]
 
 
 def qopt(value: str) -> str:
@@ -198,6 +226,8 @@ def build_argv(m: Machine, qemu_dir: str, machine_dir: str,
         if m.second_gpu.romfile:
             parts.append(f"romfile={qopt(_path(m.second_gpu.romfile, qd, platform))}")
         argv += ["-device", ",".join(parts)]
+    if m.share.volume_on:
+        argv += ninep_args(m, qd, platform)
     if m.midi.enabled:
         # the modem port (ESCC A), for the bridge in midi.py
         argv += ["-serial", f"tcp:127.0.0.1:{m.midi.port},server=on,wait=off"]

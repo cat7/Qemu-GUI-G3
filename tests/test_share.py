@@ -17,7 +17,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
-from qemugui import model, share                    # noqa: E402
+from qemugui import command, model, share           # noqa: E402
 from qemugui.model import Machine, Share, Network   # noqa: E402
 
 FIXTURES = HERE / "fixtures"
@@ -29,6 +29,78 @@ def pasv_endpoint(reply: str) -> tuple[str, int]:
     assert m, reply
     a, b, c, d, p1, p2 = (int(x) for x in m.groups())
     return f"{a}.{b}.{c}.{d}", p1 * 256 + p2
+
+
+class MacOsVolume(unittest.TestCase):
+    """The shared folder as a virtio-9p Mac OS volume."""
+
+    QD = "/Applications/qemu-system-ppc-G3-rom"
+
+    def machine(self, **share):
+        m = Machine.load(FIXTURES / "mac-os.json")
+        m.share = Share("/shared/folder", **share)
+        return m
+
+    def test_an_old_share_block_keeps_ftp_and_has_no_volume(self):
+        sh = Machine.from_dict({"name": "x", "share": {"folder": "/f"}}).share
+        self.assertTrue(sh.ftp_on)
+        self.assertFalse(sh.volume_on)
+        self.assertEqual(sh.volume_name, "Host")
+
+    def test_volume_round_trips(self):
+        m = self.machine(ftp=False, volume=True, volume_name="Shared")
+        self.assertEqual(Machine.from_json(m.to_json()).share, m.share)
+
+    def test_no_volume_no_9p(self):
+        argv = command.build_argv(self.machine(), self.QD, "/m", "darwin")
+        self.assertFalse(any("virtio-9p" in t for t in argv))
+
+    def test_volume_adds_fsdev_and_card_with_its_rom_in_a_real_slot(self):
+        m = self.machine(volume=True, volume_name="My, Disk")
+        m.second_gpu.device, m.second_gpu.addr = "ati-rage128-pro", "0x0e"
+        argv = command.build_argv(m, self.QD, "/m", "darwin")
+        fs = argv[argv.index("-fsdev") + 1]
+        self.assertEqual(fs, "local,id=hostshare,path=/shared/folder,"
+                             "security_model=none,macos_compat=on")
+        dev = next(t for t in argv if t.startswith("virtio-9p-pci"))
+        self.assertEqual(dev, "virtio-9p-pci,fsdev=hostshare,mount_tag=My,, Disk,"
+                              "romfile=" + self.QD + "/virtio-9p.rom,addr=0x0d")
+
+    def test_the_card_moves_when_the_second_gpu_holds_slot_a1(self):
+        m = self.machine(volume=True)
+        m.second_gpu.device, m.second_gpu.addr = "ati-rage128-pro", "0x0d"
+        self.assertEqual(command.ninep_slot(m), "0x0f")
+        m.second_gpu.addr = "13"
+        self.assertEqual(command.ninep_slot(m), "0x0f")
+        m.second_gpu.device = ""
+        self.assertEqual(command.ninep_slot(m), "0x0d")
+
+    def test_ftp_off_starts_no_server_and_skips_its_checks(self):
+        m = self.machine(user="", ftp=False, volume=True)
+        self.assertFalse(m.share.ftp_on)
+        with tempfile.TemporaryDirectory() as td:
+            m.share.folder = td
+            errors, _ = model.validate(m, None, "darwin", check_files=False)
+        self.assertFalse(any("user name" in e for e in errors), errors)
+
+    def test_volume_name_is_an_hfs_name(self):
+        with tempfile.TemporaryDirectory() as td:
+            for name, ok in (("Host", True), ("x" * 27, True), ("x" * 28, False),
+                             ("a:b", False), ("", False)):
+                m = self.machine(volume=True, volume_name=name)
+                m.share.folder = td
+                errors, _ = model.validate(m, None, "darwin", check_files=False)
+                self.assertEqual(not any("volume name" in e for e in errors), ok, name)
+
+    def test_a_missing_rom_is_reported_and_a_present_one_is_not(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = self.machine(volume=True)
+            m.share.folder = td
+            errors, _ = model.validate(m, td, "darwin", check_files=True)
+            self.assertTrue(any("virtio-9p.rom" in e for e in errors), errors)
+            (Path(td) / "virtio-9p.rom").write_bytes(b"\x55\xaa")
+            errors, _ = model.validate(m, td, "darwin", check_files=True)
+            self.assertFalse(any("virtio-9p.rom" in e for e in errors), errors)
 
 
 class ShareRecord(unittest.TestCase):
@@ -45,7 +117,8 @@ class ShareRecord(unittest.TestCase):
         m.share = Share("/shared/folder", "mac", "secret", "all-interfaces")
         d = json.loads(m.to_json())
         self.assertEqual(d["share"], {"folder": "/shared/folder", "user": "mac",
-                                      "password": "secret", "scope": "all-interfaces"})
+                                      "password": "secret", "scope": "all-interfaces",
+                                      "ftp": True, "volume": False, "volume_name": "Host"})
         self.assertEqual(Machine.from_json(m.to_json()), m)
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "machine.json"
