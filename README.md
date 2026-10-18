@@ -32,16 +32,19 @@ architecture, prefix the command with `QEMUGUI_TARGET_ARCH=arm64` (or
 
 ## Shared folder
 
-Each machine can share one host folder over FTP while it runs. With the
+Each machine can share one host folder while it runs, over FTP, as a
+Mac OS volume, or both; neither is on until ticked. Over FTP, with the
 default (slirp) network the Mac reaches it at `ftp://10.0.2.2/`
 (`:2121` when port 21 is taken); with vmnet choose "All interfaces", set
 a password, and use the host's own address.
 
-"Mac OS volume (virtio-9p)" also attaches the folder as a disk for Mac OS
-8.6 to 9.2 (file types and resource forks kept). It needs
-`virtio-9p.rom` (from github.com/cat7/classicvirtio, `scripts/fcoderom.py`)
-next to `qemu-system-ppc`; the card goes in PCI slot A1, or C1 when the
-second graphics card is in A1.
+"Mac OS volume (virtio-9p)" attaches the folder as a disk for Mac OS 8.6
+to 9.2 (file types and resource forks kept), and for Mac OS X 10.4 and
+10.5 with osx9p installed (its CD image is built from
+github.com/cat7/osx9p). It needs `virtio-9p.rom` (from
+github.com/cat7/classicvirtio, `scripts/fcoderom.py`) next to
+`qemu-system-ppc`; the card goes in PCI slot A1, or C1 when the second
+graphics card is in A1.
 
 ## Build on Windows
 

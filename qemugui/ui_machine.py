@@ -511,7 +511,7 @@ class MachineEditor(tk.Toplevel):
         ttk.Button(f, text="Choose…", command=self._choose_share_folder).grid(
             row=1, column=2, sticky="w", padx=4, pady=4)
 
-        self.share_ftp = tk.BooleanVar(value=True)
+        self.share_ftp = tk.BooleanVar(value=False)
         ttk.Checkbutton(f, text="Serve over FTP", variable=self.share_ftp,
                         command=self._share_changed).grid(row=2, column=0, columnspan=3,
                                                           sticky="w", pady=(8, 0))
@@ -550,8 +550,10 @@ class MachineEditor(tk.Toplevel):
         self.share_volume_entry.grid(row=12, column=1, sticky="w", pady=4)
         ttk.Label(f, text="Mac OS 8.6 to 9.2: the folder appears on the desktop,",
                   foreground=GREY).grid(row=13, column=0, columnspan=3, sticky="w")
-        ttk.Label(f, text="read and write, with file types and resource forks",
+        ttk.Label(f, text="read and write, with file types and resource forks;",
                   foreground=GREY).grid(row=14, column=0, columnspan=3, sticky="w")
+        ttk.Label(f, text="Mac OS X 10.4 and 10.5: install osx9p from its CD first",
+                  foreground=GREY).grid(row=15, column=0, columnspan=3, sticky="w")
         self._share_changed()
 
     def _share_changed(self):

@@ -47,6 +47,13 @@ class MacOsVolume(unittest.TestCase):
         self.assertFalse(sh.volume_on)
         self.assertEqual(sh.volume_name, "Host")
 
+    def test_nothing_is_ticked_by_default(self):
+        self.assertFalse(Share().ftp)
+        self.assertFalse(Share().volume)
+        sh = Machine.from_dict({"name": "x", "share": {"folder": ""}}).share
+        self.assertFalse(sh.ftp)
+        self.assertFalse(sh.volume)
+
     def test_volume_round_trips(self):
         m = self.machine(ftp=False, volume=True, volume_name="Shared")
         self.assertEqual(Machine.from_json(m.to_json()).share, m.share)
@@ -86,7 +93,7 @@ class MacOsVolume(unittest.TestCase):
     def test_volume_name_is_an_hfs_name(self):
         with tempfile.TemporaryDirectory() as td:
             for name, ok in (("Host", True), ("x" * 27, True), ("x" * 28, False),
-                             ("a:b", False), ("", False)):
+                             ("a:b", False), ("a/b", False), ("", False)):
                 m = self.machine(volume=True, volume_name=name)
                 m.share.folder = td
                 errors, _ = model.validate(m, None, "darwin", check_files=False)
@@ -118,7 +125,7 @@ class ShareRecord(unittest.TestCase):
         d = json.loads(m.to_json())
         self.assertEqual(d["share"], {"folder": "/shared/folder", "user": "mac",
                                       "password": "secret", "scope": "all-interfaces",
-                                      "ftp": True, "volume": False, "volume_name": "Host"})
+                                      "ftp": False, "volume": False, "volume_name": "Host"})
         self.assertEqual(Machine.from_json(m.to_json()), m)
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "machine.json"
@@ -127,7 +134,7 @@ class ShareRecord(unittest.TestCase):
 
     def test_a_bare_share_block_fills_in_the_defaults(self):
         m = Machine.from_dict({"name": "x", "share": {"folder": "/f"}})
-        self.assertEqual(m.share, Share("/f", "guest", "", "guest-only"))
+        self.assertEqual(m.share, Share("/f", "guest", "", "guest-only", ftp=True))
         self.assertTrue(m.share.enabled)
         self.assertEqual(Machine.from_dict({"name": "x", "share": "junk"}).share, Share())
 
@@ -136,6 +143,7 @@ class ShareChecks(unittest.TestCase):
 
     def machine(self, **kw) -> Machine:
         m = Machine.load(FIXTURES / "mac-os.json")
+        kw.setdefault("ftp", True)
         m.share = Share(**kw)
         return m
 
@@ -226,6 +234,7 @@ class ServerOnLoopback(unittest.TestCase):
 
     def machine(self, **kw) -> Machine:
         m = Machine(name="Share test", system="macos_8_to_9")
+        kw.setdefault("ftp", True)
         m.share = Share(folder=str(self.folder), **kw)
         return m
 

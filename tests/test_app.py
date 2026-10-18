@@ -766,6 +766,16 @@ class TheNetworkAndSoundTabFollowsTheHost(unittest.TestCase):
         self.assertEqual(ed.collect().network.mode, "user")
         self.assertEqual(ed.collect().audio, "default")
 
+    def test_a_new_machine_ticks_nothing_on_the_shared_folder_tab(self):
+        ed = self._tab("darwin")
+        self.assertEqual(ed.share_folder_var.get(), "")
+        self.assertFalse(ed.share_ftp.get())
+        self.assertFalse(ed.share_volume.get())
+        self.assertEqual(str(ed.share_user_entry.cget("state")), "disabled")
+        self.assertEqual(str(ed.share_volume_entry.cget("state")), "disabled")
+        self.assertFalse(ed.collect().share.ftp)
+        self.assertFalse(ed.collect().share.volume)
+
     def test_mac(self):
         ed = self._tab("darwin")
         self.assertEqual(ed.net_mode.get(), "default (slirp)")

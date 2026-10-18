@@ -378,7 +378,7 @@ class Share:
     user: str = SHARE_DEFAULT_USER
     password: str = ""
     scope: str = "guest-only"    # guest-only | all-interfaces
-    ftp: bool = True             # serve the folder over FTP
+    ftp: bool = False            # serve the folder over FTP
     volume: bool = False         # attach it as a Mac OS volume (virtio-9p)
     volume_name: str = SHARE_DEFAULT_VOLUME
 
@@ -391,11 +391,13 @@ class Share:
     def from_dict(cls, d: Any) -> "Share":
         if not isinstance(d, dict):
             return cls()
-        return cls(str(d.get("folder", "") or ""),
+        folder = str(d.get("folder", "") or "")
+        # records from before the FTP option shared their folder over FTP
+        return cls(folder,
                    str(d.get("user", SHARE_DEFAULT_USER) or SHARE_DEFAULT_USER),
                    str(d.get("password", "") or ""),
                    str(d.get("scope", "guest-only") or "guest-only"),
-                   bool(d.get("ftp", True)),
+                   bool(d.get("ftp", bool(folder.strip()))),
                    bool(d.get("volume", False)),
                    str(d.get("volume_name", SHARE_DEFAULT_VOLUME) or SHARE_DEFAULT_VOLUME))
 
@@ -682,9 +684,9 @@ def validate(m: Machine, qemu_dir: str | None, platform: str = paths.HOST_PLATFO
             warnings.append("Guest only sharing is only reachable with default (slirp).")
     if share.volume_on:
         name = share.volume_name.strip()
-        if not name or len(name) > SHARE_VOLUME_MAX or ":" in name:
+        if not name or len(name) > SHARE_VOLUME_MAX or ":" in name or "/" in name:
             errors.append(f"The volume name has to be 1 to {SHARE_VOLUME_MAX} characters, "
-                          "without a colon.")
+                          "without a colon or a slash.")
         if check_files and qemu_dir and not (Path(qemu_dir) / VIRTIO_9P_ROM).is_file():
             errors.append(f"{VIRTIO_9P_ROM} is missing next to the emulator.")
 
