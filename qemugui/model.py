@@ -111,7 +111,7 @@ NETWORK_MODE_PLATFORM = {"user": None, "none": None, "vmnet-bridged": "darwin",
 NETWORK_MODES_WITH_IFNAME = ("vmnet-bridged", "tap")
 GOVERNOR_MODES = ("default", "off", "mips")
 RAM_CHOICES = (128, 256, 512, 768, 1024)
-RAM_MIN, RAM_MAX = 32, 4096
+RAM_MIN, RAM_MAX = 32, 2047  # QEMU refuses more on the G3
 SECOND_GPU_SUPPORTED = ("ati-rage128-pro",)
 SECOND_GPU_EXPERIMENTAL = ("ati-vga", "VGA", "cirrus-vga")
 
